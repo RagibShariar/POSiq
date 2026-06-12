@@ -1,0 +1,351 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── BUSINESS ───────────────────────────────────────
+model Business {
+  id        String    @id @default(uuid())
+  name      String
+  type      String // retail, restaurant, salon, pharmacy
+  email     String    @unique
+  phone     String?
+  address   String?
+  logo      String?
+  currency  String    @default("BDT")
+  timezone  String    @default("Asia/Dhaka")
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  branches     Branch[]
+  users        User[]
+  categories   Category[]
+  products     Product[]
+  subscription Subscription?
+}
+
+// ─── BRANCH ─────────────────────────────────────────
+model Branch {
+  id           String    @id @default(uuid())
+  businessId   String
+  name         String
+  code         String // "GUL-01"
+  address      String?
+  phone        String?
+  isActive     Boolean   @default(true)
+  isMainBranch Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  business  Business       @relation(fields: [businessId], references: [id])
+  staff     UserBranch[]
+  inventory Inventory[]
+  orders    Order[]
+  registers CashRegister[]
+
+  @@unique([businessId, code])
+  @@index([businessId])
+}
+
+// ─── USER ────────────────────────────────────────────
+model User {
+  id          String    @id @default(uuid())
+  businessId  String? // null = Super Admin
+  name        String
+  email       String    @unique
+  password    String
+  role        Role      @default(CASHIER)
+  isActive    Boolean   @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  business Business?    @relation(fields: [businessId], references: [id])
+  branches UserBranch[]
+  orders   Order[]
+
+  @@index([businessId])
+}
+
+model UserBranch {
+  id         String   @id @default(uuid())
+  userId     String
+  branchId   String
+  assignedAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  branch Branch @relation(fields: [branchId], references: [id])
+
+  @@unique([userId, branchId])
+}
+
+enum Role {
+  SUPER_ADMIN
+  OWNER
+  MANAGER
+  CASHIER
+}
+
+// ─── CATEGORY ────────────────────────────────────────
+model Category {
+  id          String    @id @default(uuid())
+  businessId  String
+  name        String
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  business Business  @relation(fields: [businessId], references: [id])
+  products Product[]
+
+  @@index([businessId])
+}
+
+// ─── PRODUCT (Business-scoped catalog) ───────────────
+model Product {
+  id                String    @id @default(uuid())
+  businessId        String
+  categoryId        String?
+  name              String
+  sku               String
+  barcode           String?
+  description       String?
+  imageUrl          String?
+  price             Decimal
+  costPrice         Decimal
+  unit              String    @default("pcs")
+  lowStockThreshold Int       @default(10)
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  business   Business    @relation(fields: [businessId], references: [id])
+  category   Category?   @relation(fields: [categoryId], references: [id])
+  inventory  Inventory[]
+  orderItems OrderItem[]
+
+  @@unique([businessId, sku])
+  @@index([businessId])
+  @@index([businessId, barcode])
+}
+
+// ─── INVENTORY (Branch-scoped stock) ─────────────────
+model Inventory {
+  id         String   @id @default(uuid())
+  businessId String
+  branchId   String
+  productId  String
+  stock      Int      @default(0)
+  updatedAt  DateTime @updatedAt
+
+  branch  Branch         @relation(fields: [branchId], references: [id])
+  product Product        @relation(fields: [productId], references: [id])
+  logs    InventoryLog[]
+
+  @@unique([branchId, productId])
+  @@index([businessId])
+}
+
+model InventoryLog {
+  id          String        @id @default(uuid())
+  inventoryId String
+  branchId    String
+  productId   String
+  type        InventoryType
+  quantity    Int
+  note        String?
+  createdBy   String
+  createdAt   DateTime      @default(now())
+
+  inventory Inventory @relation(fields: [inventoryId], references: [id])
+
+  @@index([inventoryId])
+}
+
+enum InventoryType {
+  RESTOCK
+  SALE
+  ADJUSTMENT
+  TRANSFER_IN
+  TRANSFER_OUT
+}
+
+// ─── CASH REGISTER ───────────────────────────────────
+model CashRegister {
+  id             String         @id @default(uuid())
+  branchId       String
+  openedBy       String
+  closedBy       String?
+  openingBalance Decimal        @default(0)
+  closingBalance Decimal?
+  status         RegisterStatus @default(OPEN)
+  openedAt       DateTime       @default(now())
+  closedAt       DateTime?
+
+  branch Branch  @relation(fields: [branchId], references: [id])
+  orders Order[]
+
+  @@index([branchId])
+}
+
+enum RegisterStatus {
+  OPEN
+  CLOSED
+}
+
+// ─── ORDER ───────────────────────────────────────────
+model Order {
+  id             String        @id @default(uuid())
+  businessId     String
+  branchId       String
+  registerId     String?
+  cashierId      String
+  orderNumber    String // "ORD-2026-00123"
+  subtotal       Decimal
+  discountAmount Decimal       @default(0)
+  taxAmount      Decimal       @default(0)
+  totalAmount    Decimal
+  paymentMethod  PaymentMethod
+  paymentRef     String?
+  status         OrderStatus   @default(COMPLETED)
+  notes          String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  branch   Branch        @relation(fields: [branchId], references: [id])
+  cashier  User          @relation(fields: [cashierId], references: [id])
+  register CashRegister? @relation(fields: [registerId], references: [id])
+  items    OrderItem[]
+  refunds  Refund[]
+
+  @@unique([businessId, orderNumber])
+  @@index([businessId, createdAt])
+  @@index([branchId, createdAt])
+}
+
+model OrderItem {
+  id          String  @id @default(uuid())
+  orderId     String
+  productId   String
+  productName String // snapshot at time of sale
+  unitPrice   Decimal // snapshot at time of sale
+  quantity    Int
+  discount    Decimal @default(0)
+  subtotal    Decimal
+
+  order   Order   @relation(fields: [orderId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  MOBILE_BANKING
+  MIXED
+}
+
+enum OrderStatus {
+  COMPLETED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  VOIDED
+}
+
+// ─── REFUND ──────────────────────────────────────────
+model Refund {
+  id          String        @id @default(uuid())
+  orderId     String
+  branchId    String
+  processedBy String
+  amount      Decimal
+  reason      String?
+  method      PaymentMethod
+  createdAt   DateTime      @default(now())
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+}
+
+// ─── SUBSCRIPTION ────────────────────────────────────
+model Subscription {
+  id                 String             @id @default(uuid())
+  businessId         String             @unique
+  plan               PlanType           @default(FREE)
+  status             SubscriptionStatus @default(ACTIVE)
+  aiQueryLimit       Int                @default(50)
+  aiQueryUsed        Int                @default(0)
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id])
+}
+
+enum PlanType {
+  FREE
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+  PAST_DUE
+}
+
+// ─── AI QUERY LOG ────────────────────────────────────
+model AiQueryLog {
+  id         String   @id @default(uuid())
+  businessId String
+  branchId   String?
+  userId     String
+  question   String
+  response   String
+  tokensUsed Int
+  costUsd    Decimal
+  createdAt  DateTime @default(now())
+
+  @@index([businessId, createdAt])
+}
+
+// ─── REFRESH TOKEN (JWT rotation) ────────────────────
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ─── PASSWORD RESET TOKEN ────────────────────────────
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
