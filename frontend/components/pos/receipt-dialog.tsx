@@ -3,12 +3,16 @@
 import { Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import type { OrderPayment } from "@/lib/types";
 
 export interface CompletedOrder {
   orderNumber: string;
   createdAt: string;
+  customerName?: string | null;
+  customerPhone?: string | null;
   subtotal: string | number;
   discountAmount: string | number;
+  taxAmount: string | number;
   totalAmount: string | number;
   paymentMethod: string;
   cashier?: { name: string };
@@ -20,9 +24,18 @@ export interface CompletedOrder {
     quantity: number;
     subtotal: string | number;
   }[];
+  payments?: OrderPayment[];
 }
 
-const money = (n: string | number) => `৳${Number(n).toLocaleString()}`;
+const money = (n: string | number) =>
+  `৳${Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+
+const METHOD_LABEL: Record<string, string> = {
+  CASH: "Cash",
+  CARD: "Card",
+  MOBILE_BANKING: "Mobile banking",
+  MIXED: "Mixed",
+};
 
 export function ReceiptDialog({
   order,
@@ -33,6 +46,9 @@ export function ReceiptDialog({
   businessName: string;
   onClose: () => void;
 }) {
+  const totalChange =
+    order?.payments?.reduce((s, p) => s + Number(p.changeGiven ?? 0), 0) ?? 0;
+
   return (
     <Dialog open={order !== null} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-sm print:max-w-none print:border-0 print:shadow-none">
@@ -51,6 +67,12 @@ export function ReceiptDialog({
               </div>
               {order.cashier && (
                 <div className="text-xs text-muted-foreground">Served by {order.cashier.name}</div>
+              )}
+              {(order.customerName || order.customerPhone) && (
+                <div className="mt-1 text-xs">
+                  Customer: {order.customerName ?? ""}
+                  {order.customerPhone ? ` · ${order.customerPhone}` : ""}
+                </div>
               )}
             </div>
             <hr className="my-3 border-dashed" />
@@ -79,15 +101,49 @@ export function ReceiptDialog({
                   <span>-{money(order.discountAmount)}</span>
                 </div>
               )}
+              {Number(order.taxAmount) > 0 && (
+                <div className="flex justify-between">
+                  <span>Tax</span>
+                  <span>{money(order.taxAmount)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm font-bold">
                 <span>Total</span>
                 <span>{money(order.totalAmount)}</span>
               </div>
-              <div className="flex justify-between text-muted-foreground">
-                <span>Paid via</span>
-                <span>{order.paymentMethod.replace("_", " ")}</span>
-              </div>
             </div>
+
+            {order.payments && order.payments.length > 0 && (
+              <>
+                <hr className="my-3 border-dashed" />
+                <div className="space-y-0.5 text-xs">
+                  {order.payments.map((p, i) => (
+                    <div key={p.id ?? i}>
+                      <div className="flex justify-between">
+                        <span>
+                          {METHOD_LABEL[p.method] ?? p.method}
+                          {p.reference ? ` (${p.reference})` : ""}
+                        </span>
+                        <span>{money(p.amount)}</span>
+                      </div>
+                      {p.tendered !== null && p.tendered !== undefined && (
+                        <div className="flex justify-between text-muted-foreground">
+                          <span>&nbsp;&nbsp;Received {money(p.tendered)}</span>
+                          <span>Change {money(p.changeGiven ?? 0)}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {totalChange > 0 && (
+                    <div className="flex justify-between pt-0.5 text-sm font-bold">
+                      <span>CHANGE DUE</span>
+                      <span>{money(totalChange)}</span>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
             <p className="mt-4 text-center text-xs text-muted-foreground">
               Thank you for your purchase!
             </p>

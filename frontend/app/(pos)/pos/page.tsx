@@ -1,22 +1,23 @@
 "use client";
 
 import {
-  Banknote,
-  CreditCard,
   Minus,
   PauseCircle,
+  Percent,
   PlayCircle,
   Plus,
   Search,
-  Smartphone,
   Trash2,
+  UserRound,
+  XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { PaymentDialog, type PaymentSubmission } from "@/components/pos/payment-dialog";
 import { ReceiptDialog, type CompletedOrder } from "@/components/pos/receipt-dialog";
 import { RegisterControls, type Register } from "@/components/pos/register-controls";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -28,7 +29,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import type { Branch, Product } from "@/lib/types";
+import type { Branch, Product, TaxSettings } from "@/lib/types";
 
 interface CartLine {
   product: Product;
@@ -41,13 +42,33 @@ interface HeldCart {
   lines: CartLine[];
 }
 
-const PAYMENT_METHODS = [
-  { value: "CASH", label: "Cash", icon: Banknote },
-  { value: "CARD", label: "Card", icon: CreditCard },
-  { value: "MOBILE_BANKING", label: "Mobile", icon: Smartphone },
-] as const;
+const money = (n: string | number) =>
+  `৳${Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 
-const money = (n: string | number) => `৳${Number(n).toLocaleString()}`;
+const CARD_COLORS = [
+  "bg-rose-500",
+  "bg-sky-500",
+  "bg-amber-500",
+  "bg-emerald-500",
+  "bg-violet-500",
+  "bg-orange-500",
+];
+
+function ProductImage({ product, size }: { product: Product; size: "lg" | "sm" }) {
+  const cls = size === "lg" ? "h-16 w-full rounded-lg" : "h-9 w-9 rounded-md";
+  if (product.imageUrl) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={product.imageUrl} alt="" className={`${cls} border object-cover`} />;
+  }
+  const color = CARD_COLORS[product.name.length % CARD_COLORS.length];
+  return (
+    <div
+      className={`${cls} flex items-center justify-center font-black text-white ${color} ${size === "lg" ? "text-xl" : "text-[10px]"}`}
+    >
+      {product.name.slice(0, 2).toUpperCase()}
+    </div>
+  );
+}
 
 export default function PosPage() {
   const { user } = useAuth();
@@ -58,33 +79,33 @@ export default function PosPage() {
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [held, setHeld] = useState<HeldCart[]>([]);
-  const [payment, setPayment] = useState<string>("CASH");
-  const [discount, setDiscount] = useState("");
+  const [discountPct, setDiscountPct] = useState("");
+  const [discountMode, setDiscountMode] = useState<"pct" | "amt">("pct");
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [tax, setTax] = useState<TaxSettings>({ enabled: false, rate: 0, label: "VAT" });
+  const [payOpen, setPayOpen] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
   const [receipt, setReceipt] = useState<CompletedOrder | null>(null);
   const [businessName, setBusinessName] = useState("Smart POS");
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Branches the user can sell from
   useEffect(() => {
     api
-      .get<{ branches?: Branch[] } & { business?: { name: string } } & { id: string }>(
-        "/users/me"
-      )
+      .get<{ branches: Branch[]; business?: { name: string } }>("/users/me")
       .then((res) => {
-        const me = res.data as unknown as {
-          branches: Branch[];
-          business?: { name: string };
-        };
+        const me = res.data as unknown as { branches: Branch[]; business?: { name: string } };
         setBusinessName(me.business?.name ?? "Smart POS");
-        const list = me.branches ?? [];
-        setBranches(list);
-        if (list.length > 0) setBranchId(list[0].id);
+        setBranches(me.branches ?? []);
+        if ((me.branches ?? []).length > 0) setBranchId(me.branches[0].id);
       })
       .catch(() => toast.error("Failed to load your branches"));
+    api
+      .get<{ tax: TaxSettings }>("/settings")
+      .then((res) => setTax(res.data.tax))
+      .catch(() => {});
   }, []);
 
-  // Held carts are per-branch, persisted locally
   useEffect(() => {
     if (!branchId) return;
     try {
@@ -103,7 +124,6 @@ export default function PosPage() {
     [branchId]
   );
 
-  // Open register lookup per branch
   useEffect(() => {
     if (!branchId) return;
     api
@@ -112,7 +132,6 @@ export default function PosPage() {
       .catch(() => setRegister(null));
   }, [branchId]);
 
-  // Product list (debounced search)
   useEffect(() => {
     const t = setTimeout(() => {
       api
@@ -141,7 +160,6 @@ export default function PosPage() {
     );
   };
 
-  // Barcode scanners "type" the code then send Enter
   async function onSearchEnter() {
     const code = search.trim();
     if (!/^\d{6,}$/.test(code)) return;
@@ -155,12 +173,31 @@ export default function PosPage() {
     }
   }
 
+  const itemCount = useMemo(() => cart.reduce((s, l) => s + l.qty, 0), [cart]);
   const subtotal = useMemo(
     () => cart.reduce((sum, l) => sum + Number(l.product.price) * l.qty, 0),
     [cart]
   );
-  const discountNum = Math.min(Number(discount) || 0, subtotal);
-  const total = subtotal - discountNum;
+  const discountAmount = useMemo(() => {
+    const v = Number(discountPct) || 0;
+    const amt = discountMode === "pct" ? (subtotal * Math.min(v, 100)) / 100 : Math.min(v, subtotal);
+    return Number(amt.toFixed(2));
+  }, [discountPct, discountMode, subtotal]);
+  const taxAmount = useMemo(() => {
+    if (!tax.enabled || tax.rate <= 0) return 0;
+    return Number((((subtotal - discountAmount) * tax.rate) / 100).toFixed(2));
+  }, [tax, subtotal, discountAmount]);
+  const total = Number((subtotal - discountAmount + taxAmount).toFixed(2));
+
+  function clearSale() {
+    if (cart.length === 0) return;
+    if (!confirm("Cancel this sale? The cart will be emptied.")) return;
+    setCart([]);
+    setDiscountPct("");
+    setCustomerName("");
+    setCustomerPhone("");
+    toast.info("Sale cancelled");
+  }
 
   function holdCart() {
     if (cart.length === 0) return;
@@ -169,7 +206,7 @@ export default function PosPage() {
       { id: crypto.randomUUID(), heldAt: new Date().toISOString(), lines: cart },
     ]);
     setCart([]);
-    setDiscount("");
+    setDiscountPct("");
     toast.success("Sale held — resume it anytime");
   }
 
@@ -182,20 +219,25 @@ export default function PosPage() {
     persistHeld(held.filter((x) => x.id !== h.id));
   }
 
-  async function checkout() {
-    if (!branchId || cart.length === 0) return;
+  async function completeSale(payments: PaymentSubmission[]) {
     setCheckingOut(true);
     try {
       const res = await api.post<CompletedOrder>("/orders", {
         branchId,
         registerId: register?.id,
         items: cart.map((l) => ({ productId: l.product.id, quantity: l.qty })),
-        paymentMethod: payment,
-        ...(discountNum > 0 ? { discountAmount: discountNum } : {}),
+        payments,
+        ...(discountAmount > 0 ? { discountAmount } : {}),
+        ...(taxAmount > 0 ? { taxAmount } : {}),
+        ...(customerName.trim() ? { customerName: customerName.trim() } : {}),
+        ...(customerPhone.trim() ? { customerPhone: customerPhone.trim() } : {}),
       });
+      setPayOpen(false);
       setReceipt(res.data);
       setCart([]);
-      setDiscount("");
+      setDiscountPct("");
+      setCustomerName("");
+      setCustomerPhone("");
     } catch (e) {
       toast.error(e instanceof ApiRequestError ? e.message : "Checkout failed");
     } finally {
@@ -243,7 +285,7 @@ export default function PosPage() {
 
         <div className="grid flex-1 auto-rows-min grid-cols-2 gap-3 overflow-y-auto p-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {products === null &&
-            Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-24" />)}
+            Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-32" />)}
           {products?.length === 0 && (
             <p className="col-span-full py-10 text-center text-sm text-muted-foreground">
               No products found.
@@ -253,22 +295,25 @@ export default function PosPage() {
             <button
               key={p.id}
               onClick={() => addToCart(p)}
-              className="rounded-lg border bg-card p-3 text-left transition-colors hover:border-primary hover:bg-accent"
+              className="rounded-xl border bg-card p-2.5 text-left transition-all hover:border-primary hover:shadow-sm active:scale-95"
             >
-              <div className="line-clamp-2 text-sm font-medium">{p.name}</div>
-              <div className="mt-1 text-xs text-muted-foreground">{p.sku}</div>
-              <div className="mt-2 font-semibold">{money(p.price)}</div>
+              <ProductImage product={p} size="lg" />
+              <div className="mt-2 line-clamp-2 text-sm font-medium leading-tight">{p.name}</div>
+              <div className="mt-1 flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">{p.sku}</span>
+                <span className="font-bold text-primary">{money(p.price)}</span>
+              </div>
             </button>
           ))}
         </div>
 
         {held.length > 0 && (
-          <div className="flex items-center gap-2 border-t p-2">
-            <span className="text-xs font-medium text-muted-foreground">Held sales:</span>
+          <div className="flex items-center gap-2 overflow-x-auto border-t p-2">
+            <span className="shrink-0 text-xs font-medium text-muted-foreground">Held:</span>
             {held.map((h) => (
               <Button key={h.id} variant="outline" size="sm" onClick={() => resumeCart(h)}>
                 <PlayCircle className="mr-1 h-3.5 w-3.5" />
-                {h.lines.length} item{h.lines.length === 1 ? "" : "s"} ·{" "}
+                {h.lines.reduce((s, l) => s + l.qty, 0)} items ·{" "}
                 {new Date(h.heldAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </Button>
             ))}
@@ -277,18 +322,30 @@ export default function PosPage() {
       </div>
 
       {/* ── Right: cart ──────────────────────────────── */}
-      <div className="flex w-80 shrink-0 flex-col lg:w-96">
+      <div className="flex w-80 shrink-0 flex-col lg:w-[26rem]">
         <div className="flex items-center justify-between border-b p-3">
-          <h2 className="font-semibold">Current sale</h2>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={holdCart}
-            disabled={cart.length === 0}
-            title="Hold this sale"
-          >
-            <PauseCircle className="mr-1 h-4 w-4" /> Hold
-          </Button>
+          <h2 className="flex items-center gap-2 font-semibold">
+            Current sale
+            {itemCount > 0 && (
+              <Badge className="rounded-full" variant="default">
+                {itemCount} item{itemCount === 1 ? "" : "s"}
+              </Badge>
+            )}
+          </h2>
+          <div className="flex gap-1">
+            <Button variant="ghost" size="sm" onClick={holdCart} disabled={cart.length === 0}>
+              <PauseCircle className="mr-1 h-4 w-4" /> Hold
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-red-600"
+              onClick={clearSale}
+              disabled={cart.length === 0}
+            >
+              <XCircle className="mr-1 h-4 w-4" /> Cancel
+            </Button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-3">
@@ -299,12 +356,11 @@ export default function PosPage() {
           ) : (
             <div className="space-y-2">
               {cart.map((l) => (
-                <Card key={l.product.id} className="flex flex-row items-center gap-2 p-2.5">
+                <div key={l.product.id} className="flex items-center gap-2 rounded-xl border bg-card p-2">
+                  <ProductImage product={l.product} size="sm" />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">{l.product.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {money(l.product.price)} each
-                    </div>
+                    <div className="text-xs text-muted-foreground">{money(l.product.price)} each</div>
                   </div>
                   <div className="flex items-center gap-1">
                     <Button
@@ -315,7 +371,7 @@ export default function PosPage() {
                     >
                       <Minus className="h-3 w-3" />
                     </Button>
-                    <span className="w-7 text-center text-sm font-medium">{l.qty}</span>
+                    <span className="w-7 text-center text-sm font-bold">{l.qty}</span>
                     <Button
                       variant="outline"
                       size="icon"
@@ -331,64 +387,106 @@ export default function PosPage() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-muted-foreground"
+                    className="h-7 w-7 text-muted-foreground hover:text-red-500"
                     onClick={() => setQty(l.product.id, 0)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
-                </Card>
+                </div>
               ))}
             </div>
           )}
         </div>
 
-        <div className="space-y-3 border-t p-3">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Subtotal</span>
-            <span>{money(subtotal)}</span>
-          </div>
-          <div className="flex items-center justify-between gap-3 text-sm">
-            <span className="text-muted-foreground">Discount (৳)</span>
+        <div className="space-y-2.5 border-t p-3">
+          {/* Customer (optional) */}
+          <div className="flex items-center gap-2">
+            <UserRound className="h-4 w-4 shrink-0 text-muted-foreground" />
             <Input
-              type="number"
-              min="0"
-              value={discount}
-              onChange={(e) => setDiscount(e.target.value)}
-              className="h-8 w-24 text-right"
-              placeholder="0"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              placeholder="Customer name (optional)"
+              className="h-8 text-sm"
+            />
+            <Input
+              value={customerPhone}
+              onChange={(e) => setCustomerPhone(e.target.value)}
+              placeholder="Mobile no."
+              className="h-8 w-32 text-sm"
             />
           </div>
+
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Subtotal ({itemCount} items)</span>
+            <span>{money(subtotal)}</span>
+          </div>
+
+          {/* Discount with % / ৳ toggle */}
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <span className="text-muted-foreground">Discount</span>
+            <div className="flex items-center gap-1.5">
+              <div className="flex overflow-hidden rounded-md border">
+                <button
+                  type="button"
+                  onClick={() => setDiscountMode("pct")}
+                  className={`px-2 py-1 text-xs font-bold ${discountMode === "pct" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
+                >
+                  <Percent className="h-3 w-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDiscountMode("amt")}
+                  className={`px-2 py-1 text-xs font-bold ${discountMode === "amt" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
+                >
+                  ৳
+                </button>
+              </div>
+              <Input
+                type="number"
+                min="0"
+                max={discountMode === "pct" ? 100 : subtotal}
+                value={discountPct}
+                onChange={(e) => setDiscountPct(e.target.value)}
+                className="h-8 w-20 text-right"
+                placeholder="0"
+              />
+              {discountAmount > 0 && (
+                <span className="text-xs text-red-600">-{money(discountAmount)}</span>
+              )}
+            </div>
+          </div>
+
+          {tax.enabled && tax.rate > 0 && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">
+                {tax.label} ({tax.rate}%)
+              </span>
+              <span>{money(taxAmount)}</span>
+            </div>
+          )}
+
           <div className="flex items-center justify-between text-lg font-bold">
             <span>Total</span>
             <span>{money(total)}</span>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
-            {PAYMENT_METHODS.map((m) => (
-              <button
-                key={m.value}
-                onClick={() => setPayment(m.value)}
-                className={`flex flex-col items-center gap-1 rounded-md border p-2 text-xs font-medium transition-colors ${
-                  payment === m.value
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "hover:bg-accent"
-                }`}
-              >
-                <m.icon className="h-4 w-4" />
-                {m.label}
-              </button>
-            ))}
-          </div>
-
           <Button
             className="h-12 w-full text-base"
-            disabled={cart.length === 0 || checkingOut || !branchId}
-            onClick={checkout}
+            disabled={cart.length === 0 || !branchId}
+            onClick={() => setPayOpen(true)}
           >
-            {checkingOut ? "Processing…" : `Charge ${money(total)}`}
+            Charge {money(total)}
           </Button>
         </div>
       </div>
+
+      <PaymentDialog
+        open={payOpen}
+        total={total}
+        busy={checkingOut}
+        onClose={() => setPayOpen(false)}
+        onComplete={completeSale}
+      />
 
       <ReceiptDialog
         order={receipt}

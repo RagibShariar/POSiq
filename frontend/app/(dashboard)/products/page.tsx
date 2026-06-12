@@ -47,6 +47,7 @@ const EMPTY_FORM = {
   name: "",
   sku: "",
   barcode: "",
+  imageUrl: "",
   price: "",
   costPrice: "",
   unit: "pcs",
@@ -103,6 +104,7 @@ export default function ProductsPage() {
       name: p.name,
       sku: p.sku,
       barcode: p.barcode ?? "",
+      imageUrl: p.imageUrl ?? "",
       price: String(p.price),
       costPrice: String(p.costPrice),
       unit: p.unit,
@@ -119,6 +121,7 @@ export default function ProductsPage() {
       name: form.name,
       sku: form.sku,
       ...(form.barcode ? { barcode: form.barcode } : {}),
+      ...(form.imageUrl ? { imageUrl: form.imageUrl } : {}),
       price: Number(form.price),
       costPrice: Number(form.costPrice),
       unit: form.unit || "pcs",
@@ -240,7 +243,23 @@ export default function ProductsPage() {
                     : 0;
                 return (
                   <TableRow key={p.id}>
-                    <TableCell className="font-medium">{p.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        {p.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={p.imageUrl}
+                            alt=""
+                            className="h-8 w-8 rounded-md border object-cover"
+                          />
+                        ) : (
+                          <span className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-[10px] font-bold text-muted-foreground">
+                            {p.name.slice(0, 2).toUpperCase()}
+                          </span>
+                        )}
+                        {p.name}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{p.sku}</TableCell>
                     <TableCell>
                       {p.category ? (
@@ -382,6 +401,16 @@ export default function ProductsPage() {
                   id="p-barcode"
                   value={form.barcode}
                   onChange={(e) => set("barcode")(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="p-image">Image URL (optional)</Label>
+                <Input
+                  id="p-image"
+                  type="url"
+                  value={form.imageUrl}
+                  onChange={(e) => set("imageUrl")(e.target.value)}
+                  placeholder="https://…/product.jpg"
                 />
               </div>
               <div className="space-y-2">

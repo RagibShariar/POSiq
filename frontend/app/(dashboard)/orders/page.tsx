@@ -38,6 +38,8 @@ import type { ListMeta } from "@/lib/types";
 interface OrderRow {
   id: string;
   orderNumber: string;
+  customerName?: string | null;
+  customerPhone?: string | null;
   totalAmount: string | number;
   paymentMethod: string;
   status: string;
@@ -45,6 +47,7 @@ interface OrderRow {
   cashier: { name: string };
   branch: { name: string; code: string };
   items: { id: string; productName: string; quantity: number; unitPrice: string | number; subtotal: string | number }[];
+  payments?: { id: string; method: string; amount: string | number; reference?: string | null; changeGiven?: string | number | null }[];
   refunds?: { id: string; amount: string | number; reason?: string | null; createdAt: string }[];
 }
 
@@ -245,6 +248,9 @@ export default function OrdersPage() {
                 <DialogDescription>
                   {new Date(detail.createdAt).toLocaleString()} · {detail.branch.name} ·{" "}
                   {detail.cashier.name}
+                  {detail.customerName || detail.customerPhone
+                    ? ` · Customer: ${detail.customerName ?? ""}${detail.customerPhone ? ` (${detail.customerPhone})` : ""}`
+                    : ""}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-1.5 text-sm">
@@ -260,6 +266,22 @@ export default function OrdersPage() {
                   <span>Total</span>
                   <span>{money(detail.totalAmount)}</span>
                 </div>
+                {detail.payments && detail.payments.length > 0 && (
+                  <div className="rounded-md bg-muted p-2 text-xs">
+                    {detail.payments.map((p) => (
+                      <div key={p.id} className="flex justify-between">
+                        <span>
+                          {p.method.replace("_", " ")}
+                          {p.reference ? ` · ${p.reference}` : ""}
+                          {p.changeGiven && Number(p.changeGiven) > 0
+                            ? ` · change ${money(p.changeGiven)}`
+                            : ""}
+                        </span>
+                        <span>{money(p.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {detail.refunds && detail.refunds.length > 0 && (
                   <div className="rounded-md bg-red-50 p-2 text-xs text-red-700">
                     {detail.refunds.map((r) => (

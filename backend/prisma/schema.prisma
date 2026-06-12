@@ -213,6 +213,8 @@ model Order {
   registerId     String?
   cashierId      String
   orderNumber    String // "ORD-2026-00123"
+  customerName   String?
+  customerPhone  String?
   subtotal       Decimal
   discountAmount Decimal       @default(0)
   taxAmount      Decimal       @default(0)
@@ -224,15 +226,32 @@ model Order {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  branch   Branch        @relation(fields: [branchId], references: [id])
-  cashier  User          @relation(fields: [cashierId], references: [id])
-  register CashRegister? @relation(fields: [registerId], references: [id])
+  branch   Branch         @relation(fields: [branchId], references: [id])
+  cashier  User           @relation(fields: [cashierId], references: [id])
+  register CashRegister?  @relation(fields: [registerId], references: [id])
   items    OrderItem[]
+  payments OrderPayment[]
   refunds  Refund[]
 
   @@unique([businessId, orderNumber])
   @@index([businessId, createdAt])
   @@index([branchId, createdAt])
+}
+
+// One row per tender — supports split payments (e.g. half cash, half card).
+model OrderPayment {
+  id          String        @id @default(uuid())
+  orderId     String
+  method      PaymentMethod
+  amount      Decimal
+  reference   String? // card approval no. / bKash TrxID
+  tendered    Decimal? // cash handed over by the customer
+  changeGiven Decimal? // cash returned
+  createdAt   DateTime      @default(now())
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
 }
 
 model OrderItem {

@@ -43,12 +43,28 @@ export interface Product {
   name: string;
   sku: string;
   barcode?: string | null;
+  imageUrl?: string | null;
   price: string | number;
   costPrice: string | number;
   unit: string;
   lowStockThreshold: number;
   isActive: boolean;
   category?: { id: string; name: string } | null;
+}
+
+export interface OrderPayment {
+  id?: string;
+  method: "CASH" | "CARD" | "MOBILE_BANKING" | "MIXED";
+  amount: string | number;
+  reference?: string | null;
+  tendered?: string | number | null;
+  changeGiven?: string | number | null;
+}
+
+export interface TaxSettings {
+  enabled: boolean;
+  rate: number;
+  label: string;
 }
 
 export interface SummaryReport {

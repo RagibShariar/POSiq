@@ -34,6 +34,12 @@ interface ReceiptSettings {
   showCashier: boolean;
 }
 
+interface TaxSettings {
+  enabled: boolean;
+  rate: number;
+  label: string;
+}
+
 interface Subscription {
   plan: string;
   status: string;
@@ -60,6 +66,7 @@ const PLANS = [
 export default function SettingsPage() {
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
   const [receipt, setReceipt] = useState<ReceiptSettings | null>(null);
+  const [tax, setTax] = useState<TaxSettings | null>(null);
   const [sub, setSub] = useState<Subscription | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [busy, setBusy] = useState(false);
@@ -67,6 +74,7 @@ export default function SettingsPage() {
   useEffect(() => {
     api.get<BusinessProfile>("/business").then((r) => setProfile(r.data)).catch(() => {});
     api.get<ReceiptSettings>("/settings/receipt").then((r) => setReceipt(r.data)).catch(() => {});
+    api.get<{ tax: TaxSettings }>("/settings").then((r) => setTax(r.data.tax)).catch(() => {});
     api.get<Subscription>("/subscription").then((r) => setSub(r.data)).catch(() => {});
     api.get<Invoice[]>("/subscription/invoices").then((r) => setInvoices(r.data)).catch(() => {});
   }, []);
@@ -99,6 +107,20 @@ export default function SettingsPage() {
     try {
       await api.patch("/settings/receipt", receipt as unknown as Record<string, unknown>);
       toast.success("Receipt settings saved");
+    } catch (err) {
+      toast.error(err instanceof ApiRequestError ? err.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveTax(e: React.FormEvent) {
+    e.preventDefault();
+    if (!tax) return;
+    setBusy(true);
+    try {
+      await api.patch("/settings", { tax: { ...tax, rate: Number(tax.rate) || 0 } });
+      toast.success("Tax settings saved");
     } catch (err) {
       toast.error(err instanceof ApiRequestError ? err.message : "Save failed");
     } finally {
@@ -182,7 +204,52 @@ export default function SettingsPage() {
         </Card>
       </TabsContent>
 
-      <TabsContent value="receipt">
+      <TabsContent value="receipt" className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Tax / VAT</CardTitle>
+            <CardDescription>
+              Applied automatically at the POS on the amount after discount.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {tax && (
+              <form onSubmit={saveTax} className="flex flex-wrap items-end gap-4">
+                <label className="flex items-center gap-2 pb-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={tax.enabled}
+                    onChange={(e) => setTax({ ...tax, enabled: e.target.checked })}
+                  />
+                  Charge tax
+                </label>
+                <div className="space-y-2">
+                  <Label>Label</Label>
+                  <Input
+                    value={tax.label}
+                    onChange={(e) => setTax({ ...tax, label: e.target.value })}
+                    className="w-28"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Rate (%)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.5"
+                    value={tax.rate}
+                    onChange={(e) => setTax({ ...tax, rate: Number(e.target.value) })}
+                    className="w-24"
+                  />
+                </div>
+                <Button type="submit" disabled={busy}>
+                  {busy ? "Saving…" : "Save tax"}
+                </Button>
+              </form>
+            )}
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Receipt</CardTitle>

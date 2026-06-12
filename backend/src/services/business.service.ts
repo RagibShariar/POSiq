@@ -84,6 +84,11 @@ const DEFAULT_SETTINGS = {
     showLogo: true,
     showCashier: true,
   },
+  tax: {
+    enabled: false,
+    rate: 0, // percent, applied on (subtotal - discount)
+    label: "VAT",
+  },
 };
 
 type Settings = typeof DEFAULT_SETTINGS & Record<string, unknown>;
@@ -100,6 +105,7 @@ export async function getSettings(businessId: string): Promise<Settings> {
     ...DEFAULT_SETTINGS,
     ...stored,
     receipt: { ...DEFAULT_SETTINGS.receipt, ...((stored.receipt as object) ?? {}) },
+    tax: { ...DEFAULT_SETTINGS.tax, ...((stored.tax as object) ?? {}) },
   };
 }
 
@@ -109,6 +115,7 @@ export async function updateSettings(businessId: string, patch: Record<string, u
     ...current,
     ...patch,
     receipt: { ...current.receipt, ...((patch.receipt as object) ?? {}) },
+    tax: { ...current.tax, ...((patch.tax as object) ?? {}) },
   };
 
   await prisma.business.update({

@@ -7,11 +7,13 @@ import { asyncHandler } from "../utils/asyncHandler";
 
 const router = Router();
 
-router.use(authenticate, tenantIsolation, requireRole("OWNER", "MANAGER"));
+router.use(authenticate, tenantIsolation);
 
+// Reads are open to all staff — the POS needs tax/receipt config for cashiers.
 router.get("/", asyncHandler(business.getSettings));
-router.patch("/", requireRole("OWNER"), asyncHandler(business.updateSettings));
 router.get("/receipt", asyncHandler(business.getReceiptSettings));
+// Writes stay owner-only.
+router.patch("/", requireRole("OWNER"), asyncHandler(business.updateSettings));
 router.patch("/receipt", requireRole("OWNER"), asyncHandler(business.updateReceiptSettings));
 
 export default router;

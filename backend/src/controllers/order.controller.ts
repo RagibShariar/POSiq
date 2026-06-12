@@ -19,8 +19,19 @@ const createOrderSchema = z.object({
       })
     )
     .min(1),
-  paymentMethod: z.enum(paymentMethods as [PaymentMethod, ...PaymentMethod[]]),
-  paymentRef: z.string().max(100).optional(),
+  payments: z
+    .array(
+      z.object({
+        method: z.enum(paymentMethods as [PaymentMethod, ...PaymentMethod[]]),
+        amount: z.number().positive(),
+        reference: z.string().max(100).optional(),
+        tendered: z.number().min(0).optional(),
+      })
+    )
+    .min(1)
+    .max(4),
+  customerName: z.string().max(100).optional(),
+  customerPhone: z.string().max(20).optional(),
   discountAmount: z.number().min(0).optional(),
   taxAmount: z.number().min(0).optional(),
   notes: z.string().max(500).optional(),

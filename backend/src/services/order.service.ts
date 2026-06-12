@@ -9,12 +9,20 @@ interface OrderItem {
   discount?: number;
 }
 
+export interface PaymentInput {
+  method: PaymentMethod;
+  amount: number;
+  reference?: string; // card approval no. / mobile banking TrxID
+  tendered?: number; // cash handed over (change = tendered - amount)
+}
+
 interface CreateOrderInput {
   branchId: string;
   registerId?: string;
   items: OrderItem[];
-  paymentMethod: PaymentMethod;
-  paymentRef?: string;
+  payments: PaymentInput[];
+  customerName?: string;
+  customerPhone?: string;
   discountAmount?: number;
   taxAmount?: number;
   notes?: string;
@@ -34,6 +42,8 @@ const orderSelect = {
   orderNumber: true,
   branchId: true,
   cashierId: true,
+  customerName: true,
+  customerPhone: true,
   subtotal: true,
   discountAmount: true,
   taxAmount: true,
@@ -54,6 +64,16 @@ const orderSelect = {
       quantity: true,
       discount: true,
       subtotal: true,
+    },
+  },
+  payments: {
+    select: {
+      id: true,
+      method: true,
+      amount: true,
+      reference: true,
+      tendered: true,
+      changeGiven: true,
     },
   },
 } as const;
@@ -141,6 +161,45 @@ export async function createOrder(
   const taxAmount = input.taxAmount ?? 0;
   const totalAmount = subtotal - discountAmount + taxAmount;
 
+  // ── Validate payments ─────────────────────────────
+  if (input.payments.length === 0) {
+    throw ApiError.badRequest("NO_PAYMENT", "At least one payment is required");
+  }
+  const paid = input.payments.reduce((s, p) => s + p.amount, 0);
+  if (Math.abs(paid - totalAmount) > 0.01) {
+    throw ApiError.badRequest(
+      "PAYMENT_MISMATCH",
+      `Payments (${paid.toFixed(2)}) must equal the order total (${totalAmount.toFixed(2)})`
+    );
+  }
+  const paymentRows = input.payments.map((p) => {
+    if (p.method === "CASH") {
+      if (p.tendered !== undefined && p.tendered < p.amount) {
+        throw ApiError.badRequest(
+          "INSUFFICIENT_CASH",
+          `Cash received (${p.tendered}) is less than the amount due (${p.amount})`
+        );
+      }
+      return {
+        method: p.method,
+        amount: p.amount,
+        tendered: p.tendered,
+        changeGiven: p.tendered !== undefined ? Number((p.tendered - p.amount).toFixed(2)) : undefined,
+      };
+    }
+    // Non-cash tenders need proof of the transaction
+    if (!p.reference?.trim()) {
+      throw ApiError.badRequest(
+        "PAYMENT_REFERENCE_REQUIRED",
+        `${p.method === "CARD" ? "Card approval number" : "Transaction ID"} is required for ${p.method.toLowerCase().replace("_", " ")} payments`
+      );
+    }
+    return { method: p.method, amount: p.amount, reference: p.reference.trim() };
+  });
+
+  const paymentMethod: PaymentMethod =
+    input.payments.length === 1 ? input.payments[0].method : "MIXED";
+
   const orderNumber = await generateOrderNumber(businessId);
 
   const order = await prisma.$transaction(async (tx) => {
@@ -151,14 +210,17 @@ export async function createOrder(
         registerId: input.registerId,
         cashierId,
         orderNumber,
+        customerName: input.customerName,
+        customerPhone: input.customerPhone,
         subtotal,
         discountAmount,
         taxAmount,
         totalAmount,
-        paymentMethod: input.paymentMethod,
-        paymentRef: input.paymentRef,
+        paymentMethod,
+        paymentRef: input.payments.length === 1 ? input.payments[0].reference : undefined,
         notes: input.notes,
         items: { create: lineItems },
+        payments: { create: paymentRows },
       },
       select: orderSelect,
     });
@@ -344,6 +406,7 @@ export async function getReceipt(businessId: string, orderId: string) {
     where: { id: orderId, businessId },
     include: {
       items: true,
+      payments: true,
       cashier: { select: { name: true } },
       branch: { select: { name: true, address: true, phone: true } },
     },
