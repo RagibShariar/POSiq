@@ -19,6 +19,27 @@ const PRICING: Record<string, { input: number; output: number }> = {
 
 const client = new Anthropic({ apiKey: env.anthropicApiKey });
 
+// Translate Anthropic API failures into clean client-facing errors instead of
+// generic 500s. The raw message is logged by the SDK; we expose a safe summary.
+function mapProviderError(e: unknown): ApiError {
+  if (e instanceof Anthropic.AuthenticationError) {
+    return new ApiError(502, "AI_AUTH_FAILED", "AI provider rejected the server's API key");
+  }
+  if (e instanceof Anthropic.RateLimitError) {
+    return new ApiError(503, "AI_RATE_LIMITED", "AI provider is rate limiting — try again shortly");
+  }
+  if (e instanceof Anthropic.BadRequestError) {
+    const msg = e.message.includes("credit balance")
+      ? "AI provider account has insufficient credits"
+      : "AI provider rejected the request";
+    return new ApiError(502, "AI_PROVIDER_ERROR", msg);
+  }
+  if (e instanceof Anthropic.APIError) {
+    return new ApiError(502, "AI_PROVIDER_ERROR", "AI provider error — try again shortly");
+  }
+  return new ApiError(500, "INTERNAL_ERROR", "Something went wrong");
+}
+
 export interface AgentResult {
   answer: string;
   tokensUsed: number;
@@ -87,13 +108,17 @@ export async function runAgent(
   let response: Anthropic.Message | undefined;
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
-    response = await client.messages.create({
-      model: MODEL,
-      max_tokens: 2048,
-      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
-      tools: aiTools as Anthropic.Tool[],
-      messages,
-    });
+    try {
+      response = await client.messages.create({
+        model: MODEL,
+        max_tokens: 2048,
+        system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+        tools: aiTools as Anthropic.Tool[],
+        messages,
+      });
+    } catch (e) {
+      throw mapProviderError(e);
+    }
 
     totalInput += response.usage.input_tokens;
     totalOutput += response.usage.output_tokens;
