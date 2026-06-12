@@ -19,6 +19,7 @@ model Business {
   logo      String?
   currency  String    @default("BDT")
   timezone  String    @default("Asia/Dhaka")
+  settings  Json?
   isActive  Boolean   @default(true)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -309,6 +310,21 @@ enum SubscriptionStatus {
   CANCELLED
   EXPIRED
   PAST_DUE
+}
+
+// ─── BILLING RECORD (plan change history / invoices) ─
+model BillingRecord {
+  id          String   @id @default(uuid())
+  businessId  String
+  plan        PlanType
+  amount      Decimal
+  currency    String   @default("BDT")
+  periodStart DateTime
+  periodEnd   DateTime
+  note        String?
+  createdAt   DateTime @default(now())
+
+  @@index([businessId, createdAt])
 }
 
 // ─── AI QUERY LOG ────────────────────────────────────
