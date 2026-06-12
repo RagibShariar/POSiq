@@ -21,5 +21,7 @@ export const env = {
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? "7d",
   },
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
+  geminiApiKey: process.env.GEMINI_API_KEY ?? "",
+  aiProvider: process.env.AI_PROVIDER ?? "", // "claude" | "gemini" | "" (auto)
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
 };
