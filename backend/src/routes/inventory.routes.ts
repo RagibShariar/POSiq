@@ -1,19 +1,18 @@
 import { Router } from "express";
+import * as inventory from "../controllers/inventory.controller";
 import { authenticate } from "../middlewares/auth.middleware";
 import { requireRole } from "../middlewares/role.middleware";
 import { requireBranchAccess, tenantIsolation } from "../middlewares/tenant.middleware";
-import { notImplemented } from "../utils/notImplemented";
+import { asyncHandler } from "../utils/asyncHandler";
 
 const router = Router();
-
 router.use(authenticate, tenantIsolation, requireRole("OWNER", "MANAGER"));
 
-router.get("/", notImplemented);
-router.get("/logs", notImplemented);
-router.get("/:branchId", requireBranchAccess(), notImplemented);
-router.get("/:branchId/low-stock", requireBranchAccess(), notImplemented);
-router.post("/:branchId/restock", requireBranchAccess(), notImplemented);
-router.get("/:branchId/:productId", requireBranchAccess(), notImplemented);
-router.patch("/:branchId/:productId", requireBranchAccess(), notImplemented);
+router.get("/logs", asyncHandler(inventory.listLogs));
+router.get("/:branchId", requireBranchAccess(), asyncHandler(inventory.listInventory));
+router.get("/:branchId/low-stock", requireBranchAccess(), asyncHandler(inventory.getLowStock));
+router.post("/:branchId/restock", requireBranchAccess(), asyncHandler(inventory.restock));
+router.get("/:branchId/:productId", requireBranchAccess(), asyncHandler(inventory.getInventoryItem));
+router.patch("/:branchId/:productId", requireBranchAccess(), asyncHandler(inventory.adjustStock));
 
 export default router;
