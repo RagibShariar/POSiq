@@ -114,9 +114,13 @@ export async function runGemini(
 
     const calls = response.functionCalls;
     const modelParts = response.candidates?.[0]?.content?.parts ?? [];
-    finalText = (response.text ?? "").trim();
 
-    if (!calls || calls.length === 0) break;
+    if (!calls || calls.length === 0) {
+      // Only read .text on the final turn — the getter warns when the
+      // response also contains functionCall parts.
+      finalText = (response.text ?? "").trim();
+      break;
+    }
 
     contents.push({ role: "model", parts: modelParts });
 
