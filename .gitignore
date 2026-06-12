@@ -26,3 +26,4 @@ Thumbs.db
 
 # Prisma
 backend/prisma/dev.db
+frontend/screenshots/
