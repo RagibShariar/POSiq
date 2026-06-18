@@ -3,9 +3,9 @@
 import { Download } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { DateRangePicker } from "@/components/date-range-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -91,29 +91,15 @@ export default function ReportsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-40" />
-        <span className="text-muted-foreground">to</span>
-        <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-40" />
-        <div className="flex gap-1">
-          {[
-            ["7d", 7],
-            ["30d", 30],
-            ["90d", 90],
-          ].map(([label, n]) => (
-            <Button
-              key={label}
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setFrom(daysAgo(n as number));
-                setTo(daysAgo(0));
-              }}
-            >
-              {label}
-            </Button>
-          ))}
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold">Reports</h2>
+        <DateRangePicker
+          value={{ from, to }}
+          onChange={(v) => {
+            setFrom(v.from);
+            setTo(v.to);
+          }}
+        />
       </div>
 
       {sales && (

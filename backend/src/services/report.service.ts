@@ -120,6 +120,22 @@ export async function getSalesReport(businessId: string, range: DateRange) {
     _sum: { totalAmount: true },
   });
 
+  // ── Order statistics (incl. VOIDED, which the rest of the report excludes) ──
+  const allInRange: Prisma.OrderWhereInput = {
+    businessId,
+    ...(range.branchId ? { branchId: range.branchId } : {}),
+    createdAt: { gte: range.from, lte: range.to },
+  };
+  const [itemsAgg, statusGroups, discountedCount] = await Promise.all([
+    prisma.orderItem.aggregate({
+      where: { order: orderWhere(businessId, range) },
+      _sum: { quantity: true },
+    }),
+    prisma.order.groupBy({ by: ["status"], where: allInRange, _count: true }),
+    prisma.order.count({ where: { ...orderWhere(businessId, range), discountAmount: { gt: 0 } } }),
+  ]);
+  const statusCount = (s: string) => statusGroups.find((g) => g.status === s)?._count ?? 0;
+
   return {
     totals,
     daily: daily.map((d) => ({
@@ -132,6 +148,13 @@ export async function getSalesReport(businessId: string, range: DateRange) {
       orders: p._count,
       revenue: Number(p._sum.totalAmount ?? 0),
     })),
+    orderStats: {
+      itemsSold: Number(itemsAgg._sum.quantity ?? 0),
+      // No dedicated "cancelled" status yet — a fully-refunded order is the closest equivalent.
+      cancelled: statusCount("REFUNDED"),
+      voided: statusCount("VOIDED"),
+      discounted: discountedCount,
+    },
   };
 }
 

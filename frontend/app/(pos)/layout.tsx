@@ -2,8 +2,12 @@
 
 import { LayoutDashboard, LogOut } from "lucide-react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { BranchBadge } from "@/components/app-shell/branch-badge";
+import { Calculator } from "@/components/app-shell/calculator";
+import { Clock } from "@/components/app-shell/clock";
 import { RequireAuth } from "@/components/app-shell/require-auth";
+import { ThemeToggle } from "@/components/app-shell/theme-toggle";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 
 function PosChrome({ children }: { children: React.ReactNode }) {
@@ -16,10 +20,14 @@ function PosChrome({ children }: { children: React.ReactNode }) {
           <span className="font-bold tracking-tight">
             Smart<span className="text-primary">POS</span>
           </span>
-          <span className="text-sm text-muted-foreground">Point of Sale</span>
+          <span className="hidden text-sm text-muted-foreground lg:inline">Point of Sale</span>
+          <Clock />
+          <BranchBadge />
         </div>
         <div className="flex items-center gap-1">
-          <span className="mr-2 hidden text-sm text-muted-foreground sm:inline">
+          <Calculator />
+          <ThemeToggle />
+          <span className="mx-2 hidden text-sm text-muted-foreground sm:inline">
             {user?.name}
           </span>
           {user && user.role !== "CASHIER" && (

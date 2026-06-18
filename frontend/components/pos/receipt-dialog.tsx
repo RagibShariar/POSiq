@@ -1,6 +1,7 @@
 "use client";
 
 import { Printer } from "lucide-react";
+import { methodLabel } from "@/components/pos/payment-methods";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { OrderPayment } from "@/lib/types";
@@ -20,22 +21,18 @@ export interface CompletedOrder {
   items: {
     id: string;
     productName: string;
+    variationName?: string | null;
     unitPrice: string | number;
     quantity: number;
     subtotal: string | number;
+    specialNote?: string | null;
+    modifiers?: { id: string; name: string; price: string | number; quantity: number }[];
   }[];
   payments?: OrderPayment[];
 }
 
 const money = (n: string | number) =>
   `৳${Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-
-const METHOD_LABEL: Record<string, string> = {
-  CASH: "Cash",
-  CARD: "Card",
-  MOBILE_BANKING: "Mobile banking",
-  MIXED: "Mixed",
-};
 
 export function ReceiptDialog({
   order,
@@ -82,9 +79,22 @@ export function ReceiptDialog({
                   <tr key={item.id}>
                     <td className="py-0.5 pr-2">
                       {item.productName}
+                      {item.variationName ? ` — ${item.variationName}` : ""}
                       <span className="text-muted-foreground"> ×{item.quantity}</span>
+                      {item.modifiers && item.modifiers.length > 0 && (
+                        <div className="pl-2 text-[10px] text-muted-foreground">
+                          {item.modifiers
+                            .map((m) => `+ ${m.name}${m.quantity > 1 ? ` ×${m.quantity}` : ""}`)
+                            .join(", ")}
+                        </div>
+                      )}
+                      {item.specialNote && (
+                        <div className="pl-2 text-[10px] italic text-muted-foreground">
+                          {item.specialNote}
+                        </div>
+                      )}
                     </td>
-                    <td className="py-0.5 text-right">{money(item.subtotal)}</td>
+                    <td className="py-0.5 text-right align-top">{money(item.subtotal)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -121,7 +131,7 @@ export function ReceiptDialog({
                     <div key={p.id ?? i}>
                       <div className="flex justify-between">
                         <span>
-                          {METHOD_LABEL[p.method] ?? p.method}
+                          {methodLabel(p.method)}
                           {p.reference ? ` (${p.reference})` : ""}
                         </span>
                         <span>{money(p.amount)}</span>

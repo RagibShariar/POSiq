@@ -48,13 +48,68 @@ export interface Product {
   costPrice: string | number;
   unit: string;
   lowStockThreshold: number;
+  hasVariations?: boolean;
   isActive: boolean;
-  category?: { id: string; name: string } | null;
+  categories?: { id: string; name: string }[];
+  // Light shapes returned by the list endpoint — counts only.
+  modifierGroups?: { modifierGroupId: string }[];
+  variations?: { id: string }[];
+}
+
+export interface ProductVariation {
+  id: string;
+  name: string;
+  price: string | number;
+  costPrice?: string | number | null;
+  isDefault: boolean;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export type ModifierGroupType = "ADDON" | "SIDE_ITEM" | "COOKING_INSTRUCTION";
+
+export interface ModifierItem {
+  id: string;
+  name: string;
+  price: string | number;
+  isActive?: boolean;
+  sortOrder?: number;
+}
+
+export interface ModifierGroup {
+  id: string;
+  name: string;
+  type: ModifierGroupType;
+  minSelect: number;
+  maxSelect: number;
+  isActive: boolean;
+  items: ModifierItem[];
+  _count?: { productLinks: number };
+}
+
+export interface ProductModifierGroupLink {
+  isRequired: boolean;
+  sortOrder: number;
+  modifierGroup: ModifierGroup;
+}
+
+// Full product as returned by GET /products/:id and /products/barcode/:code.
+export interface ProductDetail extends Omit<Product, "modifierGroups" | "variations"> {
+  variations: ProductVariation[];
+  modifierGroups: ProductModifierGroupLink[];
+}
+
+// A configured cart line — product + chosen variation + selected modifiers.
+export interface SelectedModifier {
+  modifierItemId: string;
+  name: string;
+  price: number;
+  quantity: number;
 }
 
 export interface OrderPayment {
   id?: string;
-  method: "CASH" | "CARD" | "MOBILE_BANKING" | "MIXED";
+  method: string; // see components/pos/payment-methods PayMethod (+ legacy CARD/MOBILE_BANKING/MIXED)
   amount: string | number;
   reference?: string | null;
   tendered?: string | number | null;
@@ -75,6 +130,8 @@ export interface SummaryReport {
     refunds: number;
     refundedAmount: number;
     avgOrderValue: number;
+    totalTax: number;
+    totalDiscount: number;
     itemsSold: number;
   };
   yesterday: { orders: number; netRevenue: number };
@@ -89,7 +146,20 @@ export interface SalesReport {
     refundedAmount: number;
     netRevenue: number;
     avgOrderValue: number;
+    totalTax: number;
+    totalDiscount: number;
   };
   daily: { date: string; orders: number; revenue: number }[];
   byPaymentMethod: { method: string; orders: number; revenue: number }[];
+  orderStats: {
+    itemsSold: number;
+    cancelled: number;
+    voided: number;
+    discounted: number;
+  };
+}
+
+export interface ProductReport {
+  topProducts: { productId: string; name: string; quantitySold: number; revenue: number; orderCount: number }[];
+  slowProducts: { productId: string; name: string; quantitySold: number; revenue: number }[];
 }

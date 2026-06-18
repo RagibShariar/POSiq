@@ -16,6 +16,16 @@ const createOrderSchema = z.object({
         productId: z.string().uuid(),
         quantity: z.number().int().positive(),
         discount: z.number().min(0).optional(),
+        variationId: z.string().uuid().optional(),
+        modifiers: z
+          .array(
+            z.object({
+              modifierItemId: z.string().uuid(),
+              quantity: z.number().int().positive().optional(),
+            })
+          )
+          .optional(),
+        specialNote: z.string().max(300).optional(),
       })
     )
     .min(1),

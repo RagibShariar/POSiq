@@ -3,10 +3,22 @@ import { prisma } from "../lib/prisma";
 import { ApiError } from "../utils/ApiError";
 import { buildMeta, ListMeta } from "../utils/response";
 
+// Payment methods that require a transaction reference (proof).
+const CARD_METHODS = new Set<PaymentMethod>(["CARD", "VISA", "AMEX", "MASTERCARD"]);
+const MOBILE_METHODS = new Set<PaymentMethod>(["MOBILE_BANKING", "BKASH", "NAGAD", "ROCKET"]);
+
+interface OrderItemModifierInput {
+  modifierItemId: string;
+  quantity?: number;
+}
+
 interface OrderItem {
   productId: string;
   quantity: number;
   discount?: number;
+  variationId?: string;
+  modifiers?: OrderItemModifierInput[];
+  specialNote?: string;
 }
 
 export interface PaymentInput {
@@ -60,10 +72,16 @@ const orderSelect = {
       id: true,
       productId: true,
       productName: true,
+      variationId: true,
+      variationName: true,
       unitPrice: true,
       quantity: true,
       discount: true,
       subtotal: true,
+      specialNote: true,
+      modifiers: {
+        select: { id: true, modifierItemId: true, name: true, price: true, quantity: true },
+      },
     },
   },
   payments: {
@@ -140,19 +158,68 @@ export async function createOrder(
     }
   }
 
+  // Resolve variations (price + name come from the chosen variant)
+  const variationIds = [...new Set(input.items.map((i) => i.variationId).filter(Boolean))] as string[];
+  const variations = variationIds.length
+    ? await prisma.productVariation.findMany({
+        where: { id: { in: variationIds }, businessId, deletedAt: null },
+        select: { id: true, name: true, price: true, productId: true },
+      })
+    : [];
+  const variationMap = new Map(variations.map((v) => [v.id, v]));
+
+  // Resolve modifier items (each adds to the line price)
+  const modifierItemIds = [
+    ...new Set(input.items.flatMap((i) => (i.modifiers ?? []).map((m) => m.modifierItemId))),
+  ];
+  const modifierItems = modifierItemIds.length
+    ? await prisma.modifierItem.findMany({
+        where: { id: { in: modifierItemIds }, businessId },
+        select: { id: true, name: true, price: true },
+      })
+    : [];
+  const modifierMap = new Map(modifierItems.map((m) => [m.id, m]));
+
   // Build line items
   const lineItems = input.items.map((item) => {
     const product = productMap.get(item.productId)!;
-    const unitPrice = Number(product.price);
+    let unitPrice = Number(product.price);
+    let variationName: string | undefined;
+
+    if (item.variationId) {
+      const v = variationMap.get(item.variationId);
+      if (!v || v.productId !== item.productId) {
+        throw ApiError.badRequest("INVALID_VARIATION", `Invalid variation for "${product.name}"`);
+      }
+      unitPrice = Number(v.price);
+      variationName = v.name;
+    }
+
+    const modifiers = (item.modifiers ?? []).map((m) => {
+      const mi = modifierMap.get(m.modifierItemId);
+      if (!mi) throw ApiError.badRequest("INVALID_MODIFIER", "One or more modifiers not found");
+      return {
+        modifierItemId: mi.id,
+        name: mi.name,
+        price: Number(mi.price),
+        quantity: m.quantity && m.quantity > 0 ? m.quantity : 1,
+      };
+    });
+    const modifiersTotal = modifiers.reduce((s, m) => s + m.price * m.quantity, 0);
+
     const discount = item.discount ?? 0;
-    const subtotal = unitPrice * item.quantity - discount;
+    const subtotal = (unitPrice + modifiersTotal) * item.quantity - discount;
     return {
       productId: item.productId,
       productName: product.name,
+      variationId: item.variationId,
+      variationName,
       unitPrice,
       quantity: item.quantity,
       discount,
       subtotal,
+      specialNote: item.specialNote?.trim() || undefined,
+      modifiers,
     };
   });
 
@@ -187,14 +254,22 @@ export async function createOrder(
         changeGiven: p.tendered !== undefined ? Number((p.tendered - p.amount).toFixed(2)) : undefined,
       };
     }
-    // Non-cash tenders need proof of the transaction
-    if (!p.reference?.trim()) {
-      throw ApiError.badRequest(
-        "PAYMENT_REFERENCE_REQUIRED",
-        `${p.method === "CARD" ? "Card approval number" : "Transaction ID"} is required for ${p.method.toLowerCase().replace("_", " ")} payments`
-      );
+    // Card networks and mobile-banking tenders need proof of the transaction.
+    if (CARD_METHODS.has(p.method) || MOBILE_METHODS.has(p.method)) {
+      if (!p.reference?.trim()) {
+        throw ApiError.badRequest(
+          "PAYMENT_REFERENCE_REQUIRED",
+          `${CARD_METHODS.has(p.method) ? "Card approval number" : "Transaction ID"} is required for ${p.method.toLowerCase()} payments`
+        );
+      }
+      return { method: p.method, amount: p.amount, reference: p.reference.trim() };
     }
-    return { method: p.method, amount: p.amount, reference: p.reference.trim() };
+    // DUE / COMPLIMENT / delivery platforms / OTHER — reference is optional.
+    return {
+      method: p.method,
+      amount: p.amount,
+      ...(p.reference?.trim() ? { reference: p.reference.trim() } : {}),
+    };
   });
 
   const paymentMethod: PaymentMethod =
@@ -219,7 +294,31 @@ export async function createOrder(
         paymentMethod,
         paymentRef: input.payments.length === 1 ? input.payments[0].reference : undefined,
         notes: input.notes,
-        items: { create: lineItems },
+        items: {
+          create: lineItems.map((li) => ({
+            productId: li.productId,
+            productName: li.productName,
+            variationId: li.variationId,
+            variationName: li.variationName,
+            unitPrice: li.unitPrice,
+            quantity: li.quantity,
+            discount: li.discount,
+            subtotal: li.subtotal,
+            specialNote: li.specialNote,
+            ...(li.modifiers.length
+              ? {
+                  modifiers: {
+                    create: li.modifiers.map((m) => ({
+                      modifierItemId: m.modifierItemId,
+                      name: m.name,
+                      price: m.price,
+                      quantity: m.quantity,
+                    })),
+                  },
+                }
+              : {}),
+          })),
+        },
         payments: { create: paymentRows },
       },
       select: orderSelect,

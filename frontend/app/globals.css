@@ -128,3 +128,23 @@
     @apply font-sans;
   }
 }
+
+/* react-day-picker — match the app palette */
+.rdp-theme {
+  --rdp-day-width: 2.25rem;
+  --rdp-day-height: 2.25rem;
+}
+.rdp-theme .rdp-selected .rdp-day_button,
+.rdp-theme .rdp-range_start .rdp-day_button,
+.rdp-theme .rdp-range_end .rdp-day_button {
+  color: var(--primary-foreground);
+  font-weight: 600;
+}
+.rdp-theme .rdp-range_middle .rdp-day_button {
+  color: var(--foreground);
+  border-radius: 0;
+}
+.rdp-theme .rdp-today:not(.rdp-selected) .rdp-day_button {
+  color: var(--primary);
+  font-weight: 700;
+}

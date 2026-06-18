@@ -14,7 +14,7 @@ const productSchema = z.object({
   costPrice: z.number().min(0),
   unit: z.string().max(20).optional(),
   lowStockThreshold: z.number().int().min(0).optional(),
-  categoryId: z.string().uuid().optional(),
+  categoryIds: z.array(z.string().uuid()).max(20).optional(),
 });
 
 const bulkRowSchema = z.object({
@@ -77,4 +77,57 @@ export async function getLowStock(req: Request, res: Response) {
   };
   const { products, meta } = await productService.listProducts(biz(req), opts);
   list(res, products, meta);
+}
+
+// ─── VARIATIONS ──────────────────────────────────────
+const variationSchema = z.object({
+  name: z.string().min(1).max(100),
+  price: z.number().min(0),
+  costPrice: z.number().min(0).optional(),
+  isDefault: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+export async function listVariations(req: Request, res: Response) {
+  ok(res, await productService.listVariations(biz(req), req.params.id));
+}
+
+export async function createVariation(req: Request, res: Response) {
+  const input = variationSchema.parse(req.body);
+  ok(res, await productService.createVariation(biz(req), req.params.id, input), "Variation created", 201);
+}
+
+export async function updateVariation(req: Request, res: Response) {
+  const input = variationSchema.partial().parse(req.body);
+  ok(res, await productService.updateVariation(biz(req), req.params.id, req.params.varId, input), "Variation updated");
+}
+
+export async function deleteVariation(req: Request, res: Response) {
+  await productService.deleteVariation(biz(req), req.params.id, req.params.varId);
+  ok(res, null, "Variation deleted");
+}
+
+// ─── PRODUCT ↔ MODIFIER GROUP LINKS ──────────────────
+const linkSchema = z.object({
+  modifierGroupId: z.string().uuid(),
+  isRequired: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+export async function linkModifierGroup(req: Request, res: Response) {
+  const input = linkSchema.parse(req.body);
+  ok(
+    res,
+    await productService.linkModifierGroup(biz(req), req.params.id, input.modifierGroupId, {
+      isRequired: input.isRequired,
+      sortOrder: input.sortOrder,
+    }),
+    "Modifier group linked"
+  );
+}
+
+export async function unlinkModifierGroup(req: Request, res: Response) {
+  await productService.unlinkModifierGroup(biz(req), req.params.id, req.params.groupId);
+  ok(res, null, "Modifier group unlinked");
 }

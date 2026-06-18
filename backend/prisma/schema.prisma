@@ -106,8 +106,8 @@ model Category {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  business Business  @relation(fields: [businessId], references: [id])
-  products Product[]
+  business Business          @relation(fields: [businessId], references: [id])
+  products ProductCategory[]
 
   @@index([businessId])
 }
@@ -116,7 +116,6 @@ model Category {
 model Product {
   id                String    @id @default(uuid())
   businessId        String
-  categoryId        String?
   name              String
   sku               String
   barcode           String?
@@ -126,19 +125,34 @@ model Product {
   costPrice         Decimal
   unit              String    @default("pcs")
   lowStockThreshold Int       @default(10)
+  hasVariations     Boolean   @default(false)
   isActive          Boolean   @default(true)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   deletedAt         DateTime?
 
-  business   Business    @relation(fields: [businessId], references: [id])
-  category   Category?   @relation(fields: [categoryId], references: [id])
-  inventory  Inventory[]
-  orderItems OrderItem[]
+  business       Business               @relation(fields: [businessId], references: [id])
+  categories     ProductCategory[]
+  inventory      Inventory[]
+  orderItems     OrderItem[]
+  variations     ProductVariation[]
+  modifierGroups ProductModifierGroup[]
 
   @@unique([businessId, sku])
   @@index([businessId])
   @@index([businessId, barcode])
+}
+
+// Join table — a product can belong to multiple categories.
+model ProductCategory {
+  productId  String
+  categoryId String
+
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([productId, categoryId])
+  @@index([categoryId])
 }
 
 // ─── INVENTORY (Branch-scoped stock) ─────────────────
@@ -255,27 +269,57 @@ model OrderPayment {
 }
 
 model OrderItem {
-  id          String  @id @default(uuid())
-  orderId     String
-  productId   String
-  productName String // snapshot at time of sale
-  unitPrice   Decimal // snapshot at time of sale
-  quantity    Int
-  discount    Decimal @default(0)
-  subtotal    Decimal
+  id            String  @id @default(uuid())
+  orderId       String
+  productId     String
+  productName   String // snapshot at time of sale
+  variationId   String? // scalar snapshot — variation may later be deleted
+  variationName String? // snapshot at time of sale
+  unitPrice     Decimal // snapshot at time of sale (includes variation price)
+  quantity      Int
+  discount      Decimal @default(0)
+  subtotal      Decimal // (unitPrice + modifiers) * qty - discount
+  specialNote   String?
 
-  order   Order   @relation(fields: [orderId], references: [id])
-  product Product @relation(fields: [productId], references: [id])
+  order     Order               @relation(fields: [orderId], references: [id])
+  product   Product             @relation(fields: [productId], references: [id])
+  modifiers OrderItemModifier[]
 
   @@index([orderId])
   @@index([productId])
 }
 
+// Snapshot of a modifier selected on an order line (e.g. "Extra Shot ×1").
+model OrderItemModifier {
+  id             String  @id @default(uuid())
+  orderItemId    String
+  modifierItemId String // scalar snapshot — modifier may later be deleted
+  name           String
+  price          Decimal @default(0)
+  quantity       Int     @default(1)
+
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@index([orderItemId])
+}
+
 enum PaymentMethod {
   CASH
-  CARD
-  MOBILE_BANKING
-  MIXED
+  CARD // legacy generic card (kept for old orders)
+  MOBILE_BANKING // legacy generic MFS (kept for old orders)
+  MIXED // split-payment marker
+  DUE
+  COMPLIMENT
+  VISA
+  AMEX
+  MASTERCARD
+  BKASH
+  NAGAD
+  ROCKET
+  FOODPANDA
+  FOODI
+  PATHAO
+  OTHER
 }
 
 enum OrderStatus {
@@ -383,4 +427,81 @@ model PasswordResetToken {
   createdAt DateTime  @default(now())
 
   @@index([userId])
+}
+
+// ─── PRODUCT VARIATIONS & MODIFIERS ──────────────────
+
+// Size/flavor variants of a product (e.g. "Regular" ৳250, "Large" ৳350).
+model ProductVariation {
+  id         String    @id @default(uuid())
+  productId  String
+  businessId String
+  name       String
+  price      Decimal
+  costPrice  Decimal?
+  isDefault  Boolean   @default(false)
+  isActive   Boolean   @default(true)
+  sortOrder  Int       @default(0)
+  createdAt  DateTime  @default(now())
+  deletedAt  DateTime?
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([businessId])
+}
+
+enum ModifierGroupType {
+  ADDON
+  SIDE_ITEM
+  COOKING_INSTRUCTION
+}
+
+// A group of modifiers, e.g. "Drinks Add Ons", "Cooking Instructions".
+model ModifierGroup {
+  id         String            @id @default(uuid())
+  businessId String
+  name       String
+  type       ModifierGroupType @default(ADDON)
+  minSelect  Int               @default(0)
+  maxSelect  Int               @default(10)
+  isActive   Boolean           @default(true)
+  createdAt  DateTime          @default(now())
+  deletedAt  DateTime?
+
+  items        ModifierItem[]
+  productLinks ProductModifierGroup[]
+
+  @@index([businessId])
+}
+
+// Individual modifier option (e.g. "Extra Shot" +৳75).
+model ModifierItem {
+  id         String   @id @default(uuid())
+  groupId    String
+  businessId String
+  name       String
+  price      Decimal  @default(0)
+  isActive   Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  group ModifierGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@index([businessId])
+}
+
+// Links modifier groups to the products they apply to.
+model ProductModifierGroup {
+  productId       String
+  modifierGroupId String
+  isRequired      Boolean @default(false)
+  sortOrder       Int     @default(0)
+
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  modifierGroup ModifierGroup @relation(fields: [modifierGroupId], references: [id], onDelete: Cascade)
+
+  @@id([productId, modifierGroupId])
+  @@index([modifierGroupId])
 }

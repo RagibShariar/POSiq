@@ -22,7 +22,7 @@ const inventorySelect = {
       unit: true,
       lowStockThreshold: true,
       price: true,
-      category: { select: { id: true, name: true } },
+      categories: { select: { category: { select: { id: true, name: true } } } },
     },
   },
 } as const;

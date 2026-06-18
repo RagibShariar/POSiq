@@ -88,8 +88,8 @@ export async function updateCategory(businessId: string, id: string, input: Part
 export async function deleteCategory(businessId: string, id: string) {
   await getCategory(businessId, id);
 
-  const productCount = await prisma.product.count({
-    where: { categoryId: id, deletedAt: null },
+  const productCount = await prisma.productCategory.count({
+    where: { categoryId: id, product: { deletedAt: null } },
   });
   if (productCount > 0) {
     throw ApiError.badRequest(

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { ItemConfigDialog, type ItemConfig } from "@/components/pos/item-config-dialog";
 import { PaymentDialog, type PaymentSubmission } from "@/components/pos/payment-dialog";
 import { ReceiptDialog, type CompletedOrder } from "@/components/pos/receipt-dialog";
 import { RegisterControls, type Register } from "@/components/pos/register-controls";
@@ -29,12 +30,24 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import type { Branch, Product, TaxSettings } from "@/lib/types";
+import type { Branch, Product, ProductDetail, SelectedModifier, TaxSettings } from "@/lib/types";
+
+// Minimal product shape a cart line needs — satisfied by both Product and ProductDetail.
+type CartProduct = { id: string; name: string; price: string | number; imageUrl?: string | null };
 
 interface CartLine {
-  product: Product;
+  key: string; // unique per configured line
+  product: CartProduct;
   qty: number;
+  variationId?: string;
+  variationName?: string;
+  unitPrice: number; // base price (variation price, or product price)
+  modifiers: SelectedModifier[];
+  specialNote?: string;
 }
+
+const lineUnitTotal = (l: CartLine) =>
+  l.unitPrice + l.modifiers.reduce((s, m) => s + m.price * m.quantity, 0);
 
 interface HeldCart {
   id: string;
@@ -54,7 +67,13 @@ const CARD_COLORS = [
   "bg-orange-500",
 ];
 
-function ProductImage({ product, size }: { product: Product; size: "lg" | "sm" }) {
+function ProductImage({
+  product,
+  size,
+}: {
+  product: { name: string; imageUrl?: string | null };
+  size: "lg" | "sm";
+}) {
   const cls = size === "lg" ? "h-16 w-full rounded-lg" : "h-9 w-9 rounded-md";
   if (product.imageUrl) {
     // eslint-disable-next-line @next/next/no-img-element
@@ -84,6 +103,7 @@ export default function PosPage() {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [tax, setTax] = useState<TaxSettings>({ enabled: false, rate: 0, label: "VAT" });
+  const [configProduct, setConfigProduct] = useState<ProductDetail | null>(null);
   const [payOpen, setPayOpen] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
   const [receipt, setReceipt] = useState<CompletedOrder | null>(null);
@@ -142,21 +162,68 @@ export default function PosPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const addToCart = useCallback((product: Product) => {
+  // Plain add (no variations/modifiers) — merges with an existing identical line.
+  const addPlainLine = useCallback((product: CartProduct) => {
     setCart((c) => {
-      const existing = c.find((l) => l.product.id === product.id);
+      const existing = c.find(
+        (l) => l.product.id === product.id && !l.variationId && l.modifiers.length === 0 && !l.specialNote
+      );
       if (existing) {
-        return c.map((l) => (l.product.id === product.id ? { ...l, qty: l.qty + 1 } : l));
+        return c.map((l) => (l.key === existing.key ? { ...l, qty: l.qty + 1 } : l));
       }
-      return [...c, { product, qty: 1 }];
+      return [
+        ...c,
+        {
+          key: crypto.randomUUID(),
+          product,
+          qty: 1,
+          unitPrice: Number(product.price),
+          modifiers: [],
+        },
+      ];
     });
   }, []);
 
-  const setQty = (productId: string, qty: number) => {
+  const needsConfig = (p: { hasVariations?: boolean; modifierGroups?: unknown[] }) =>
+    Boolean(p.hasVariations) || (p.modifierGroups?.length ?? 0) > 0;
+
+  // Product tile click: open the config dialog when the item has options, else add directly.
+  const onProductClick = useCallback(
+    async (product: Product) => {
+      if (!needsConfig(product)) {
+        addPlainLine(product);
+        return;
+      }
+      try {
+        const res = await api.get<ProductDetail>(`/products/${product.id}`);
+        setConfigProduct(res.data);
+      } catch {
+        toast.error("Failed to load product options");
+      }
+    },
+    [addPlainLine]
+  );
+
+  function addConfiguredLine(product: ProductDetail, config: ItemConfig) {
+    setCart((c) => [
+      ...c,
+      {
+        key: crypto.randomUUID(),
+        product,
+        qty: config.qty,
+        variationId: config.variationId,
+        variationName: config.variationName,
+        unitPrice: config.unitPrice,
+        modifiers: config.modifiers,
+        specialNote: config.specialNote,
+      },
+    ]);
+    setConfigProduct(null);
+  }
+
+  const setQty = (key: string, qty: number) => {
     setCart((c) =>
-      qty <= 0
-        ? c.filter((l) => l.product.id !== productId)
-        : c.map((l) => (l.product.id === productId ? { ...l, qty } : l))
+      qty <= 0 ? c.filter((l) => l.key !== key) : c.map((l) => (l.key === key ? { ...l, qty } : l))
     );
   };
 
@@ -164,10 +231,14 @@ export default function PosPage() {
     const code = search.trim();
     if (!/^\d{6,}$/.test(code)) return;
     try {
-      const res = await api.get<Product>(`/products/barcode/${encodeURIComponent(code)}`);
-      addToCart(res.data);
+      const res = await api.get<ProductDetail>(`/products/barcode/${encodeURIComponent(code)}`);
+      if (needsConfig(res.data)) {
+        setConfigProduct(res.data);
+      } else {
+        addPlainLine(res.data);
+        toast.success(`Added ${res.data.name}`);
+      }
       setSearch("");
-      toast.success(`Added ${res.data.name}`);
     } catch {
       toast.error("No product found for this barcode");
     }
@@ -175,7 +246,7 @@ export default function PosPage() {
 
   const itemCount = useMemo(() => cart.reduce((s, l) => s + l.qty, 0), [cart]);
   const subtotal = useMemo(
-    () => cart.reduce((sum, l) => sum + Number(l.product.price) * l.qty, 0),
+    () => cart.reduce((sum, l) => sum + lineUnitTotal(l) * l.qty, 0),
     [cart]
   );
   const discountAmount = useMemo(() => {
@@ -215,7 +286,15 @@ export default function PosPage() {
       toast.error("Finish or hold the current sale first");
       return;
     }
-    setCart(h.lines);
+    // Normalize older held carts that predate configured lines.
+    setCart(
+      h.lines.map((l) => ({
+        ...l,
+        key: l.key ?? crypto.randomUUID(),
+        modifiers: l.modifiers ?? [],
+        unitPrice: l.unitPrice ?? Number(l.product.price),
+      }))
+    );
     persistHeld(held.filter((x) => x.id !== h.id));
   }
 
@@ -225,7 +304,15 @@ export default function PosPage() {
       const res = await api.post<CompletedOrder>("/orders", {
         branchId,
         registerId: register?.id,
-        items: cart.map((l) => ({ productId: l.product.id, quantity: l.qty })),
+        items: cart.map((l) => ({
+          productId: l.product.id,
+          quantity: l.qty,
+          ...(l.variationId ? { variationId: l.variationId } : {}),
+          ...(l.modifiers.length
+            ? { modifiers: l.modifiers.map((m) => ({ modifierItemId: m.modifierItemId, quantity: m.quantity })) }
+            : {}),
+          ...(l.specialNote ? { specialNote: l.specialNote } : {}),
+        })),
         payments,
         ...(discountAmount > 0 ? { discountAmount } : {}),
         ...(taxAmount > 0 ? { taxAmount } : {}),
@@ -294,14 +381,18 @@ export default function PosPage() {
           {products?.map((p) => (
             <button
               key={p.id}
-              onClick={() => addToCart(p)}
+              onClick={() => onProductClick(p)}
               className="rounded-xl border bg-card p-2.5 text-left transition-all hover:border-primary hover:shadow-sm active:scale-95"
             >
               <ProductImage product={p} size="lg" />
               <div className="mt-2 line-clamp-2 text-sm font-medium leading-tight">{p.name}</div>
               <div className="mt-1 flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">{p.sku}</span>
-                <span className="font-bold text-primary">{money(p.price)}</span>
+                <span className="text-xs text-muted-foreground">
+                  {needsConfig(p) ? "Options" : p.sku}
+                </span>
+                <span className="font-bold text-primary">
+                  {needsConfig(p) ? `from ${money(p.price)}` : money(p.price)}
+                </span>
               </div>
             </button>
           ))}
@@ -356,42 +447,59 @@ export default function PosPage() {
           ) : (
             <div className="space-y-2">
               {cart.map((l) => (
-                <div key={l.product.id} className="flex items-center gap-2 rounded-xl border bg-card p-2">
+                <div key={l.key} className="flex items-start gap-2 rounded-xl border bg-card p-2">
                   <ProductImage product={l.product} size="sm" />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{l.product.name}</div>
-                    <div className="text-xs text-muted-foreground">{money(l.product.price)} each</div>
+                    <div className="truncate text-sm font-medium">
+                      {l.product.name}
+                      {l.variationName ? (
+                        <span className="text-muted-foreground"> — {l.variationName}</span>
+                      ) : null}
+                    </div>
+                    <div className="text-xs text-muted-foreground">{money(lineUnitTotal(l))} each</div>
+                    {l.modifiers.length > 0 && (
+                      <div className="mt-0.5 text-[11px] leading-tight text-muted-foreground">
+                        {l.modifiers
+                          .map((m) => `${m.name}${m.quantity > 1 ? ` ×${m.quantity}` : ""}`)
+                          .join(", ")}
+                      </div>
+                    )}
+                    {l.specialNote && (
+                      <div className="mt-0.5 text-[11px] italic leading-tight text-amber-600">
+                        “{l.specialNote}”
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={() => setQty(l.product.id, l.qty - 1)}
-                    >
-                      <Minus className="h-3 w-3" />
-                    </Button>
-                    <span className="w-7 text-center text-sm font-bold">{l.qty}</span>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={() => setQty(l.product.id, l.qty + 1)}
-                    >
-                      <Plus className="h-3 w-3" />
-                    </Button>
+                  <div className="flex flex-col items-end gap-1">
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => setQty(l.key, l.qty - 1)}
+                      >
+                        <Minus className="h-3 w-3" />
+                      </Button>
+                      <span className="w-7 text-center text-sm font-bold">{l.qty}</span>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => setQty(l.key, l.qty + 1)}
+                      >
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-red-500"
+                        onClick={() => setQty(l.key, 0)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    <div className="text-sm font-semibold">{money(lineUnitTotal(l) * l.qty)}</div>
                   </div>
-                  <div className="w-16 text-right text-sm font-semibold">
-                    {money(Number(l.product.price) * l.qty)}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-red-500"
-                    onClick={() => setQty(l.product.id, 0)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
                 </div>
               ))}
             </div>
@@ -479,6 +587,12 @@ export default function PosPage() {
           </Button>
         </div>
       </div>
+
+      <ItemConfigDialog
+        product={configProduct}
+        onClose={() => setConfigProduct(null)}
+        onAdd={(config) => configProduct && addConfiguredLine(configProduct, config)}
+      />
 
       <PaymentDialog
         open={payOpen}

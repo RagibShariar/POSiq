@@ -31,6 +31,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { DateRangePicker, type DateRangeValue } from "@/components/date-range-picker";
+import { methodLabel } from "@/components/pos/payment-methods";
 import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import type { ListMeta } from "@/lib/types";
@@ -46,7 +48,16 @@ interface OrderRow {
   createdAt: string;
   cashier: { name: string };
   branch: { name: string; code: string };
-  items: { id: string; productName: string; quantity: number; unitPrice: string | number; subtotal: string | number }[];
+  items: {
+    id: string;
+    productName: string;
+    variationName?: string | null;
+    quantity: number;
+    unitPrice: string | number;
+    subtotal: string | number;
+    specialNote?: string | null;
+    modifiers?: { id: string; name: string; price: string | number; quantity: number }[];
+  }[];
   payments?: { id: string; method: string; amount: string | number; reference?: string | null; changeGiven?: string | number | null }[];
   refunds?: { id: string; amount: string | number; reason?: string | null; createdAt: string }[];
 }
@@ -66,6 +77,7 @@ export default function OrdersPage() {
   const [meta, setMeta] = useState<ListMeta | null>(null);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("all");
+  const [dateRange, setDateRange] = useState<DateRangeValue>({ from: "", to: "" });
   const [detail, setDetail] = useState<OrderRow | null>(null);
   const [refundFor, setRefundFor] = useState<OrderRow | null>(null);
   const [refundAmount, setRefundAmount] = useState("");
@@ -76,14 +88,16 @@ export default function OrdersPage() {
 
   const load = useCallback(() => {
     const statusQ = status !== "all" ? `&status=${status}` : "";
+    const fromQ = dateRange.from ? `&from=${dateRange.from}` : "";
+    const toQ = dateRange.to ? `&to=${dateRange.to}` : "";
     api
-      .get<OrderRow[]>(`/orders?page=${page}&limit=20${statusQ}`)
+      .get<OrderRow[]>(`/orders?page=${page}&limit=20${statusQ}${fromQ}${toQ}`)
       .then((res) => {
         setOrders(res.data);
         setMeta(res.meta ?? null);
       })
       .catch(() => toast.error("Failed to load orders"));
-  }, [page, status]);
+  }, [page, status, dateRange.from, dateRange.to]);
 
   useEffect(load, [load]);
 
@@ -131,7 +145,7 @@ export default function OrdersPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Select
           value={status}
           onValueChange={(v) => {
@@ -150,6 +164,14 @@ export default function OrdersPage() {
             <SelectItem value="VOIDED">Voided</SelectItem>
           </SelectContent>
         </Select>
+        <DateRangePicker
+          value={dateRange}
+          onChange={(v) => {
+            setDateRange(v);
+            setPage(1);
+          }}
+          allowAll
+        />
       </div>
 
       <div className="rounded-lg border bg-card">
@@ -193,9 +215,7 @@ export default function OrdersPage() {
                 <TableCell>{o.branch.code}</TableCell>
                 <TableCell className="text-muted-foreground">{o.cashier.name}</TableCell>
                 <TableCell className="text-right font-semibold">{money(o.totalAmount)}</TableCell>
-                <TableCell className="text-muted-foreground">
-                  {o.paymentMethod.replace("_", " ")}
-                </TableCell>
+                <TableCell className="text-muted-foreground">{methodLabel(o.paymentMethod)}</TableCell>
                 <TableCell>
                   <Badge className={STATUS_STYLE[o.status] ?? ""} variant="secondary">
                     {o.status.replace("_", " ")}
@@ -257,7 +277,21 @@ export default function OrdersPage() {
                 {detail.items.map((i) => (
                   <div key={i.id} className="flex justify-between">
                     <span>
-                      {i.productName} <span className="text-muted-foreground">×{i.quantity}</span>
+                      {i.productName}
+                      {i.variationName ? ` — ${i.variationName}` : ""}{" "}
+                      <span className="text-muted-foreground">×{i.quantity}</span>
+                      {i.modifiers && i.modifiers.length > 0 && (
+                        <span className="block text-xs text-muted-foreground">
+                          {i.modifiers
+                            .map((m) => `+ ${m.name}${m.quantity > 1 ? ` ×${m.quantity}` : ""}`)
+                            .join(", ")}
+                        </span>
+                      )}
+                      {i.specialNote && (
+                        <span className="block text-xs italic text-muted-foreground">
+                          {i.specialNote}
+                        </span>
+                      )}
                     </span>
                     <span>{money(i.subtotal)}</span>
                   </div>
@@ -271,7 +305,7 @@ export default function OrdersPage() {
                     {detail.payments.map((p) => (
                       <div key={p.id} className="flex justify-between">
                         <span>
-                          {p.method.replace("_", " ")}
+                          {methodLabel(p.method)}
                           {p.reference ? ` · ${p.reference}` : ""}
                           {p.changeGiven && Number(p.changeGiven) > 0
                             ? ` · change ${money(p.changeGiven)}`

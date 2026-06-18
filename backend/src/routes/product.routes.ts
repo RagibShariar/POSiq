@@ -17,4 +17,14 @@ router.get("/:id", asyncHandler(product.getProduct));
 router.patch("/:id", requireRole("OWNER", "MANAGER"), asyncHandler(product.updateProduct));
 router.delete("/:id", requireRole("OWNER", "MANAGER"), asyncHandler(product.deleteProduct));
 
+// Variations
+router.get("/:id/variations", asyncHandler(product.listVariations));
+router.post("/:id/variations", requireRole("OWNER", "MANAGER"), asyncHandler(product.createVariation));
+router.patch("/:id/variations/:varId", requireRole("OWNER", "MANAGER"), asyncHandler(product.updateVariation));
+router.delete("/:id/variations/:varId", requireRole("OWNER", "MANAGER"), asyncHandler(product.deleteVariation));
+
+// Modifier group links
+router.post("/:id/modifier-groups", requireRole("OWNER", "MANAGER"), asyncHandler(product.linkModifierGroup));
+router.delete("/:id/modifier-groups/:groupId", requireRole("OWNER", "MANAGER"), asyncHandler(product.unlinkModifierGroup));
+
 export default router;
