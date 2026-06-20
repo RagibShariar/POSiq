@@ -286,6 +286,127 @@ export async function getInventoryReport(businessId: string, branchId?: string) 
   };
 }
 
+// ─── DASHBOARD EXTRAS (profit, time patterns, category, low stock, target) ──
+// One call powering the optional dashboard widgets. COGS is estimated from the
+// product's *current* cost price (OrderItem doesn't snapshot cost), so profit is
+// an approximation when cost prices change over time.
+export async function getDashboardExtras(businessId: string, range: DateRange) {
+  const biz = await prisma.business.findFirst({
+    where: { id: businessId },
+    select: { timezone: true, settings: true },
+  });
+  const tz = biz?.timezone || "Asia/Dhaka";
+  const settings = (biz?.settings as Record<string, unknown> | null) ?? {};
+  const salesTarget = Number(settings.salesTarget ?? 0);
+
+  const branchOi = range.branchId ? Prisma.sql`AND o."branchId" = ${range.branchId}` : Prisma.empty;
+  const branchO = range.branchId ? Prisma.sql`AND "branchId" = ${range.branchId}` : Prisma.empty;
+
+  const [totals, cogsRows, byHour, byDayHour, byCategory, byBranch] = await Promise.all([
+    salesTotals(businessId, range),
+    prisma.$queryRaw<{ cogs: number }[]>(Prisma.sql`
+      SELECT COALESCE(SUM(oi.quantity * p."costPrice"), 0)::float AS cogs
+      FROM "OrderItem" oi
+      JOIN "Order" o ON o.id = oi."orderId"
+      JOIN "Product" p ON p.id = oi."productId"
+      WHERE o."businessId" = ${businessId} AND o.status != 'VOIDED'
+        AND o."createdAt" >= ${range.from} AND o."createdAt" <= ${range.to}
+        ${branchOi}
+    `),
+    prisma.$queryRaw<{ hour: number; orders: number; revenue: number }[]>(Prisma.sql`
+      SELECT EXTRACT(HOUR FROM "createdAt" AT TIME ZONE ${tz})::int AS hour,
+             COUNT(*)::int AS orders,
+             COALESCE(SUM("totalAmount"), 0)::float AS revenue
+      FROM "Order"
+      WHERE "businessId" = ${businessId} AND status != 'VOIDED'
+        AND "createdAt" >= ${range.from} AND "createdAt" <= ${range.to}
+        ${branchO}
+      GROUP BY 1 ORDER BY 1
+    `),
+    prisma.$queryRaw<{ dow: number; hour: number; revenue: number; orders: number }[]>(Prisma.sql`
+      SELECT EXTRACT(DOW FROM "createdAt" AT TIME ZONE ${tz})::int AS dow,
+             EXTRACT(HOUR FROM "createdAt" AT TIME ZONE ${tz})::int AS hour,
+             COALESCE(SUM("totalAmount"), 0)::float AS revenue,
+             COUNT(*)::int AS orders
+      FROM "Order"
+      WHERE "businessId" = ${businessId} AND status != 'VOIDED'
+        AND "createdAt" >= ${range.from} AND "createdAt" <= ${range.to}
+        ${branchO}
+      GROUP BY 1, 2
+    `),
+    prisma.$queryRaw<{ category: string; revenue: number; qty: number }[]>(Prisma.sql`
+      SELECT c.name AS category,
+             COALESCE(SUM(oi.subtotal), 0)::float AS revenue,
+             COALESCE(SUM(oi.quantity), 0)::int AS qty
+      FROM "OrderItem" oi
+      JOIN "Order" o ON o.id = oi."orderId"
+      JOIN "ProductCategory" pc ON pc."productId" = oi."productId"
+      JOIN "Category" c ON c.id = pc."categoryId"
+      WHERE o."businessId" = ${businessId} AND o.status != 'VOIDED'
+        AND o."createdAt" >= ${range.from} AND o."createdAt" <= ${range.to}
+        ${branchOi}
+      GROUP BY c.name ORDER BY revenue DESC
+    `),
+    getBranchReport(businessId, { from: range.from, to: range.to }),
+  ]);
+
+  const netRevenue = totals.netRevenue;
+  const cogs = cogsRows[0]?.cogs ?? 0;
+  const grossProfit = netRevenue - cogs;
+
+  // Low-stock items (stock summed across branches, or branch-scoped).
+  const inv = await prisma.inventory.findMany({
+    where: {
+      businessId,
+      ...(range.branchId ? { branchId: range.branchId } : {}),
+      product: { deletedAt: null, isActive: true },
+    },
+    select: { stock: true, product: { select: { id: true, name: true, lowStockThreshold: true } } },
+  });
+  const stockByProduct = new Map<string, { name: string; stock: number; threshold: number }>();
+  for (const i of inv) {
+    const e =
+      stockByProduct.get(i.product.id) ??
+      { name: i.product.name, stock: 0, threshold: i.product.lowStockThreshold };
+    e.stock += i.stock;
+    stockByProduct.set(i.product.id, e);
+  }
+  const lowStock = [...stockByProduct.values()]
+    .filter((p) => p.stock < p.threshold)
+    .sort((a, b) => a.stock - a.threshold - (b.stock - b.threshold))
+    .slice(0, 8);
+
+  // Monthly target — current calendar month net revenue vs the configured goal.
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const monthTotals = await salesTotals(businessId, {
+    from: monthStart,
+    to: now,
+    branchId: range.branchId,
+  });
+  const daysInMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();
+
+  return {
+    profit: {
+      netRevenue,
+      cogs,
+      grossProfit,
+      margin: netRevenue > 0 ? Number(((grossProfit / netRevenue) * 100).toFixed(1)) : 0,
+    },
+    byHour,
+    byDayHour,
+    byCategory,
+    byBranch,
+    lowStock,
+    monthlyTarget: {
+      target: salesTarget,
+      achieved: monthTotals.netRevenue,
+      daysLeft: daysInMonth - now.getUTCDate(),
+      pct: salesTarget > 0 ? Number(((monthTotals.netRevenue / salesTarget) * 100).toFixed(1)) : 0,
+    },
+  };
+}
+
 // ─── BRANCH COMPARISON ───────────────────────────────
 export async function getBranchReport(businessId: string, range: Omit<DateRange, "branchId">) {
   const grouped = await prisma.order.groupBy({

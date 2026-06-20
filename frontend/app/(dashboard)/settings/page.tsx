@@ -77,6 +77,7 @@ export default function SettingsPage() {
   const [tax, setTax] = useState<TaxSettings | null>(null);
   const [platforms, setPlatforms] = useState<PlatformSettings | null>(null);
   const [barcode, setBarcode] = useState<BarcodeSettings | null>(null);
+  const [salesTarget, setSalesTarget] = useState<string>("0");
   const [sub, setSub] = useState<Subscription | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [busy, setBusy] = useState(false);
@@ -84,14 +85,19 @@ export default function SettingsPage() {
   useEffect(() => {
     api.get<BusinessProfile>("/business").then((r) => setProfile(r.data)).catch(() => {});
     api
-      .get<{ tax: TaxSettings; platforms: PlatformSettings; receipt: InvoiceSettings; barcode: BarcodeSettings }>(
-        "/settings"
-      )
+      .get<{
+        tax: TaxSettings;
+        platforms: PlatformSettings;
+        receipt: InvoiceSettings;
+        barcode: BarcodeSettings;
+        salesTarget?: number;
+      }>("/settings")
       .then((r) => {
         setTax(r.data.tax);
         setPlatforms(r.data.platforms);
         setReceipt(r.data.receipt);
         setBarcode({ ...DEFAULT_BARCODE_SETTINGS, ...r.data.barcode });
+        setSalesTarget(String(r.data.salesTarget ?? 0));
       })
       .catch(() => {});
     api.get<Subscription>("/subscription").then((r) => setSub(r.data)).catch(() => {});
@@ -165,6 +171,19 @@ export default function SettingsPage() {
     }
   }
 
+  async function saveSalesTarget(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api.patch("/settings", { salesTarget: Number(salesTarget) || 0 });
+      toast.success("Monthly target saved");
+    } catch (err) {
+      toast.error(err instanceof ApiRequestError ? err.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveBarcode(e: React.FormEvent) {
     e.preventDefault();
     if (!barcode) return;
@@ -207,7 +226,7 @@ export default function SettingsPage() {
         <TabsTrigger value="subscription">Subscription</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="business">
+      <TabsContent value="business" className="space-y-4">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Business profile</CardTitle>
@@ -257,6 +276,35 @@ export default function SettingsPage() {
                 </Button>
               </form>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Monthly sales target</CardTitle>
+            <CardDescription>
+              Your net-sales goal for the month. Drives the target gauge on the dashboard.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={saveSalesTarget} className="flex flex-wrap items-end gap-3">
+              <div className="space-y-2">
+                <Label>Target (per month)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="100"
+                  value={salesTarget}
+                  onChange={(e) => setSalesTarget(e.target.value)}
+                  placeholder="e.g. 500000"
+                  className="w-44"
+                />
+              </div>
+              <Button type="submit" disabled={busy}>
+                {busy ? "Saving…" : "Save target"}
+              </Button>
+              <span className="pb-2 text-xs text-muted-foreground">Set 0 to hide the gauge.</span>
+            </form>
           </CardContent>
         </Card>
       </TabsContent>

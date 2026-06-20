@@ -212,6 +212,21 @@ export interface PlatformSettings {
   foodi: PlatformConfig;
 }
 
+export interface DashboardExtras {
+  profit: { netRevenue: number; cogs: number; grossProfit: number; margin: number };
+  byHour: { hour: number; orders: number; revenue: number }[];
+  byDayHour: { dow: number; hour: number; revenue: number; orders: number }[];
+  byCategory: { category: string; revenue: number; qty: number }[];
+  byBranch: {
+    branch: { id: string; name: string; code: string };
+    orders: number;
+    revenue: number;
+    avgOrderValue: number;
+  }[];
+  lowStock: { name: string; stock: number; threshold: number }[];
+  monthlyTarget: { target: number; achieved: number; daysLeft: number; pct: number };
+}
+
 export interface ProductReport {
   topProducts: { productId: string; name: string; quantitySold: number; revenue: number; orderCount: number }[];
   slowProducts: { productId: string; name: string; quantitySold: number; revenue: number }[];

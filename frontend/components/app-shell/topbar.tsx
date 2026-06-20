@@ -43,7 +43,7 @@ export function Topbar({ title }: { title?: string }) {
         <Hint label="Open POS in a new tab">
           <Button
             asChild
-            className="h-9 gap-1.5 px-4 text-sm font-semibold shadow-sm ring-2 ring-primary/30"
+            className="h-9 gap-1.5 px-4 text-sm font-semibold shadow-sm"
           >
             <Link href="/pos" target="_blank" rel="noopener noreferrer">
               <ShoppingCart className="h-[18px] w-[18px]" />

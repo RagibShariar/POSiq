@@ -100,6 +100,8 @@ const DEFAULT_SETTINGS = {
     rate: 0, // percent, applied on (subtotal - discount)
     label: "VAT",
   },
+  // Monthly net-sales goal (in the business currency). 0 = not set.
+  salesTarget: 0,
   // Barcode sticker / label sheet defaults. Used to seed the Print Labels page.
   barcode: {
     barcodeType: "CODE128", // CODE128 | EAN13 | UPC | CODE39

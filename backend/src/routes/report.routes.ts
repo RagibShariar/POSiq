@@ -14,6 +14,7 @@ router.get("/sales", asyncHandler(report.sales));
 router.get("/products", asyncHandler(report.products));
 router.get("/cashiers", asyncHandler(report.cashiers));
 router.get("/inventory", asyncHandler(report.inventory));
+router.get("/dashboard", asyncHandler(report.dashboard));
 router.get("/branches", requireRole("OWNER"), asyncHandler(report.branches));
 
 export default router;

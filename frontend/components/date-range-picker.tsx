@@ -23,7 +23,9 @@ const toStr = (d?: Date) => (d ? format(d, "yyyy-MM-dd") : "");
 /** Human label for a range, e.g. "Jun 11 – Jun 18, 2026" / "Today" / "All time". */
 export function rangeLabel(v: DateRangeValue, emptyLabel = "All time") {
   if (!v.from && !v.to) return emptyLabel;
-  if (v.from && v.from === v.to) return format(parseISO(v.from), "MMM d, yyyy");
+  if (v.from && v.from === v.to) {
+    return v.from === daysAgo(0) ? "Today" : format(parseISO(v.from), "MMM d, yyyy");
+  }
   if (v.from && v.to) return `${format(parseISO(v.from), "MMM d")} – ${format(parseISO(v.to), "MMM d, yyyy")}`;
   if (v.from) return `From ${format(parseISO(v.from), "MMM d, yyyy")}`;
   return `Until ${format(parseISO(v.to), "MMM d, yyyy")}`;
@@ -53,6 +55,13 @@ export function DateRangePicker({
       </PopoverTrigger>
       <PopoverContent align="end">
         <div className="mb-2 flex flex-wrap gap-1 border-b pb-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onChange({ from: daysAgo(0), to: daysAgo(0) })}
+          >
+            Today
+          </Button>
           {presets.map((n) => (
             <Button
               key={n}

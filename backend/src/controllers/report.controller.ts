@@ -58,6 +58,10 @@ export async function inventory(req: Request, res: Response) {
   ok(res, report);
 }
 
+export async function dashboard(req: Request, res: Response) {
+  ok(res, await reportService.getDashboardExtras(biz(req), parseRange(req)));
+}
+
 export async function branches(req: Request, res: Response) {
   const { from, to } = parseRange(req);
   const report = await reportService.getBranchReport(biz(req), { from, to });
