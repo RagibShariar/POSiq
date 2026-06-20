@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Hint } from "@/components/ui/hint";
 import {
   Dialog,
   DialogContent,
@@ -130,18 +131,22 @@ export default function BranchesPage() {
               </CardTitle>
               {isOwner && (
                 <div className="flex">
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(b)}>
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  {!b.isMainBranch && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground"
-                      onClick={() => remove(b)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
+                  <Hint label="Edit branch">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(b)}>
+                      <Pencil className="h-3.5 w-3.5" />
                     </Button>
+                  </Hint>
+                  {!b.isMainBranch && (
+                    <Hint label="Delete branch">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground"
+                        onClick={() => remove(b)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </Hint>
                   )}
                 </div>
               )}

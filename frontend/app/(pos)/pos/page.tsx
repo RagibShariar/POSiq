@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Bike,
   Minus,
   PauseCircle,
   Percent,
@@ -19,6 +20,7 @@ import { ReceiptDialog, type CompletedOrder } from "@/components/pos/receipt-dia
 import { RegisterControls, type Register } from "@/components/pos/register-controls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Hint } from "@/components/ui/hint";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -30,7 +32,17 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import type { Branch, Product, ProductDetail, SelectedModifier, TaxSettings } from "@/lib/types";
+import { PLATFORMS } from "@/lib/platforms";
+import type {
+  Branch,
+  InvoiceSettings,
+  OrderPlatform,
+  PlatformSettings,
+  Product,
+  ProductDetail,
+  SelectedModifier,
+  TaxSettings,
+} from "@/lib/types";
 
 // Minimal product shape a cart line needs — satisfied by both Product and ProductDetail.
 type CartProduct = { id: string; name: string; price: string | number; imageUrl?: string | null };
@@ -103,11 +115,20 @@ export default function PosPage() {
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [tax, setTax] = useState<TaxSettings>({ enabled: false, rate: 0, label: "VAT" });
+  const [platformCfg, setPlatformCfg] = useState<PlatformSettings | null>(null);
+  const [platform, setPlatform] = useState<OrderPlatform>("OTHER");
+  const [platformOrderId, setPlatformOrderId] = useState("");
   const [configProduct, setConfigProduct] = useState<ProductDetail | null>(null);
   const [payOpen, setPayOpen] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
   const [receipt, setReceipt] = useState<CompletedOrder | null>(null);
   const [businessName, setBusinessName] = useState("Smart POS");
+  const [invoiceCfg, setInvoiceCfg] = useState<Partial<InvoiceSettings>>({});
+  const [businessInfo, setBusinessInfo] = useState<{
+    phone?: string | null;
+    address?: string | null;
+    email?: string | null;
+  }>({});
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -121,8 +142,22 @@ export default function PosPage() {
       })
       .catch(() => toast.error("Failed to load your branches"));
     api
-      .get<{ tax: TaxSettings }>("/settings")
-      .then((res) => setTax(res.data.tax))
+      .get<{ tax: TaxSettings; platforms: PlatformSettings; receipt: InvoiceSettings }>("/settings")
+      .then((res) => {
+        setTax(res.data.tax);
+        setPlatformCfg(res.data.platforms);
+        if (res.data.receipt) setInvoiceCfg(res.data.receipt);
+      })
+      .catch(() => {});
+    api
+      .get<{ phone?: string | null; address?: string | null; email?: string | null }>("/business")
+      .then((res) =>
+        setBusinessInfo({
+          phone: res.data.phone,
+          address: res.data.address,
+          email: res.data.email,
+        })
+      )
       .catch(() => {});
   }, []);
 
@@ -260,6 +295,25 @@ export default function PosPage() {
   }, [tax, subtotal, discountAmount]);
   const total = Number((subtotal - discountAmount + taxAmount).toFixed(2));
 
+  // Only In-store + the platforms enabled in settings.
+  const availablePlatforms = PLATFORMS.filter(
+    (p) => !p.settingsKey || platformCfg?.[p.settingsKey]?.enabled
+  );
+
+  function choosePlatform(p: OrderPlatform) {
+    setPlatform(p);
+    setPlatformOrderId("");
+    // Auto-apply the platform's configured discount (clears it for In-store).
+    const meta = PLATFORMS.find((x) => x.id === p);
+    const cfg = meta?.settingsKey && platformCfg ? platformCfg[meta.settingsKey] : null;
+    if (cfg && cfg.discountPercent > 0) {
+      setDiscountMode("pct");
+      setDiscountPct(String(cfg.discountPercent));
+    } else {
+      setDiscountPct("");
+    }
+  }
+
   function clearSale() {
     if (cart.length === 0) return;
     if (!confirm("Cancel this sale? The cart will be emptied.")) return;
@@ -267,6 +321,8 @@ export default function PosPage() {
     setDiscountPct("");
     setCustomerName("");
     setCustomerPhone("");
+    setPlatform("OTHER");
+    setPlatformOrderId("");
     toast.info("Sale cancelled");
   }
 
@@ -318,6 +374,8 @@ export default function PosPage() {
         ...(taxAmount > 0 ? { taxAmount } : {}),
         ...(customerName.trim() ? { customerName: customerName.trim() } : {}),
         ...(customerPhone.trim() ? { customerPhone: customerPhone.trim() } : {}),
+        ...(platform !== "OTHER" ? { platform } : {}),
+        ...(platformOrderId.trim() ? { platformOrderId: platformOrderId.trim() } : {}),
       });
       setPayOpen(false);
       setReceipt(res.data);
@@ -325,6 +383,8 @@ export default function PosPage() {
       setDiscountPct("");
       setCustomerName("");
       setCustomerPhone("");
+      setPlatform("OTHER");
+      setPlatformOrderId("");
     } catch (e) {
       toast.error(e instanceof ApiRequestError ? e.message : "Checkout failed");
     } finally {
@@ -489,14 +549,16 @@ export default function PosPage() {
                       >
                         <Plus className="h-3 w-3" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-red-500"
-                        onClick={() => setQty(l.key, 0)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      <Hint label="Remove item">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-red-500"
+                          onClick={() => setQty(l.key, 0)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </Hint>
                     </div>
                     <div className="text-sm font-semibold">{money(lineUnitTotal(l) * l.qty)}</div>
                   </div>
@@ -507,6 +569,31 @@ export default function PosPage() {
         </div>
 
         <div className="space-y-2.5 border-t p-3">
+          {/* Platform / sales channel */}
+          <div className="flex items-center gap-2">
+            <Bike className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <Select value={platform} onValueChange={(v) => choosePlatform(v as OrderPlatform)}>
+              <SelectTrigger className="h-8 flex-1 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availablePlatforms.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {platform !== "OTHER" && (
+              <Input
+                value={platformOrderId}
+                onChange={(e) => setPlatformOrderId(e.target.value)}
+                placeholder="Platform order ID"
+                className="h-8 w-36 text-sm"
+              />
+            )}
+          </div>
+
           {/* Customer (optional) */}
           <div className="flex items-center gap-2">
             <UserRound className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -605,6 +692,8 @@ export default function PosPage() {
       <ReceiptDialog
         order={receipt}
         businessName={businessName}
+        invoice={invoiceCfg}
+        business={businessInfo}
         onClose={() => {
           setReceipt(null);
           searchRef.current?.focus();

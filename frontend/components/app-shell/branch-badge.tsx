@@ -38,7 +38,7 @@ export function BranchBadge() {
 
   if (branches.length === 1) {
     return (
-      <span className={pill} title={`${main.name} · ${main.code}`}>
+      <span className={pill}>
         <Building2 className="h-4 w-4 shrink-0 text-primary/70" />
         <span className="font-medium">{main.name}</span>
         <span className="text-muted-foreground">· {main.code}</span>

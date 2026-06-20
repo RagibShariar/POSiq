@@ -4,7 +4,7 @@ import { Printer } from "lucide-react";
 import { methodLabel } from "@/components/pos/payment-methods";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import type { OrderPayment } from "@/lib/types";
+import type { InvoiceSettings, OrderPayment } from "@/lib/types";
 
 export interface CompletedOrder {
   orderNumber: string;
@@ -34,38 +34,84 @@ export interface CompletedOrder {
 const money = (n: string | number) =>
   `৳${Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 
+const PAPER_WIDTH: Record<string, string> = {
+  "58mm": "max-w-[58mm]",
+  "80mm": "max-w-sm",
+  A4: "max-w-md",
+};
+
 export function ReceiptDialog({
   order,
   businessName,
+  invoice,
+  business,
   onClose,
 }: {
   order: CompletedOrder | null;
   businessName: string;
+  invoice?: Partial<InvoiceSettings>;
+  business?: { phone?: string | null; address?: string | null; email?: string | null };
   onClose: () => void;
 }) {
   const totalChange =
     order?.payments?.reduce((s, p) => s + Number(p.changeGiven ?? 0), 0) ?? 0;
 
+  const inv: InvoiceSettings = {
+    headerText: "",
+    footerText: "Thank you for your purchase!",
+    showLogo: true,
+    showCashier: true,
+    paperSize: "80mm",
+    showPhone: true,
+    showAddress: true,
+    showEmail: false,
+    showCustomer: true,
+    showTaxBreakdown: true,
+    showOrderNote: true,
+    accentColor: "#27496d",
+    fontScale: 100,
+    ...invoice,
+  };
+  const widthClass = PAPER_WIDTH[inv.paperSize] ?? "max-w-sm";
+
   return (
     <Dialog open={order !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-sm print:max-w-none print:border-0 print:shadow-none">
+      <DialogContent
+        className={`${widthClass} print:max-w-none print:border-0 print:shadow-none`}
+      >
         <DialogHeader>
           <DialogTitle className="sr-only">Receipt</DialogTitle>
         </DialogHeader>
         {order && (
-          <div id="receipt" className="font-mono text-sm">
+          <div
+            id="receipt"
+            className="font-mono"
+            style={{ fontSize: `${(inv.fontScale / 100) * 14}px` }}
+          >
             <div className="text-center">
-              <div className="text-base font-bold">{businessName}</div>
+              <div className="text-base font-bold" style={{ color: inv.accentColor }}>
+                {businessName}
+              </div>
               {order.branch && (
                 <div className="text-xs text-muted-foreground">{order.branch.name}</div>
               )}
+              {inv.showAddress && business?.address && (
+                <div className="text-xs text-muted-foreground">{business.address}</div>
+              )}
+              {inv.showPhone && business?.phone && (
+                <div className="text-xs text-muted-foreground">Tel: {business.phone}</div>
+              )}
+              {inv.showEmail && business?.email && (
+                <div className="text-xs text-muted-foreground">{business.email}</div>
+              )}
+              {inv.headerText && <div className="mt-1 text-xs">{inv.headerText}</div>}
               <div className="mt-1 text-xs">
                 {order.orderNumber} · {new Date(order.createdAt).toLocaleString()}
               </div>
-              {order.cashier && (
+              {inv.showCashier && order.cashier && (
                 <div className="text-xs text-muted-foreground">Served by {order.cashier.name}</div>
               )}
-              {(order.customerName || order.customerPhone) && (
+              {inv.showCustomer && (order.customerName || order.customerPhone) && (
                 <div className="mt-1 text-xs">
                   Customer: {order.customerName ?? ""}
                   {order.customerPhone ? ` · ${order.customerPhone}` : ""}
@@ -111,7 +157,7 @@ export function ReceiptDialog({
                   <span>-{money(order.discountAmount)}</span>
                 </div>
               )}
-              {Number(order.taxAmount) > 0 && (
+              {inv.showTaxBreakdown && Number(order.taxAmount) > 0 && (
                 <div className="flex justify-between">
                   <span>Tax</span>
                   <span>{money(order.taxAmount)}</span>
@@ -154,9 +200,9 @@ export function ReceiptDialog({
               </>
             )}
 
-            <p className="mt-4 text-center text-xs text-muted-foreground">
-              Thank you for your purchase!
-            </p>
+            {inv.footerText && (
+              <p className="mt-4 text-center text-xs text-muted-foreground">{inv.footerText}</p>
+            )}
           </div>
         )}
         <div className="flex gap-2 print:hidden">

@@ -5,9 +5,12 @@ import Link from "next/link";
 import { BranchBadge } from "@/components/app-shell/branch-badge";
 import { Calculator } from "@/components/app-shell/calculator";
 import { Clock } from "@/components/app-shell/clock";
+import { FullscreenToggle } from "@/components/app-shell/fullscreen-toggle";
 import { ThemeToggle } from "@/components/app-shell/theme-toggle";
+import { InstallAppButton } from "@/components/pwa-install";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Hint } from "@/components/ui/hint";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,17 +40,20 @@ export function Topbar({ title }: { title?: string }) {
         {title && <h1 className="text-base font-semibold">{title}</h1>}
       </div>
       <div className="flex items-center gap-2">
-        <Button
-          asChild
-          title="Open POS"
-          className="h-9 gap-1.5 px-4 text-sm font-semibold shadow-sm ring-2 ring-primary/30"
-        >
-          <Link href="/pos" target="_blank" rel="noopener noreferrer">
-            <ShoppingCart className="h-[18px] w-[18px]" />
-            POS
-          </Link>
-        </Button>
+        <Hint label="Open POS in a new tab">
+          <Button
+            asChild
+            className="h-9 gap-1.5 px-4 text-sm font-semibold shadow-sm ring-2 ring-primary/30"
+          >
+            <Link href="/pos" target="_blank" rel="noopener noreferrer">
+              <ShoppingCart className="h-[18px] w-[18px]" />
+              POS
+            </Link>
+          </Button>
+        </Hint>
+        <InstallAppButton />
         <Calculator />
+        <FullscreenToggle />
         <ThemeToggle />
         <DropdownMenu>
         <DropdownMenuTrigger asChild>

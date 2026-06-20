@@ -2,6 +2,7 @@
 
 import {
   BarChart3,
+  Barcode,
   Boxes,
   Building2,
   LayoutDashboard,
@@ -29,6 +30,7 @@ const NAV: NavItem[] = [
   // POS lives in the topbar as a highlighted quick-access button.
   { href: "/orders", label: "Orders", icon: Receipt, roles: ["OWNER", "MANAGER", "CASHIER"] },
   { href: "/products", label: "Products", icon: Package, roles: ["OWNER", "MANAGER"] },
+  { href: "/labels", label: "Print Labels", icon: Barcode, roles: ["OWNER", "MANAGER"] },
   { href: "/inventory", label: "Inventory", icon: Boxes, roles: ["OWNER", "MANAGER"] },
   { href: "/reports", label: "Reports", icon: BarChart3, roles: ["OWNER", "MANAGER"] },
   { href: "/ai", label: "AI Assistant", icon: Sparkles, roles: ["OWNER", "MANAGER"] },

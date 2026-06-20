@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Hint } from "@/components/ui/hint";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +36,7 @@ import { DateRangePicker, type DateRangeValue } from "@/components/date-range-pi
 import { methodLabel } from "@/components/pos/payment-methods";
 import { api, ApiRequestError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { platformLabel } from "@/lib/platforms";
 import type { ListMeta } from "@/lib/types";
 
 interface OrderRow {
@@ -42,6 +44,8 @@ interface OrderRow {
   orderNumber: string;
   customerName?: string | null;
   customerPhone?: string | null;
+  platform?: string;
+  platformOrderId?: string | null;
   totalAmount: string | number;
   paymentMethod: string;
   status: string;
@@ -77,6 +81,7 @@ export default function OrdersPage() {
   const [meta, setMeta] = useState<ListMeta | null>(null);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("all");
+  const [platform, setPlatform] = useState("all");
   const [dateRange, setDateRange] = useState<DateRangeValue>({ from: "", to: "" });
   const [detail, setDetail] = useState<OrderRow | null>(null);
   const [refundFor, setRefundFor] = useState<OrderRow | null>(null);
@@ -88,16 +93,17 @@ export default function OrdersPage() {
 
   const load = useCallback(() => {
     const statusQ = status !== "all" ? `&status=${status}` : "";
+    const platformQ = platform !== "all" ? `&platform=${platform}` : "";
     const fromQ = dateRange.from ? `&from=${dateRange.from}` : "";
     const toQ = dateRange.to ? `&to=${dateRange.to}` : "";
     api
-      .get<OrderRow[]>(`/orders?page=${page}&limit=20${statusQ}${fromQ}${toQ}`)
+      .get<OrderRow[]>(`/orders?page=${page}&limit=20${statusQ}${platformQ}${fromQ}${toQ}`)
       .then((res) => {
         setOrders(res.data);
         setMeta(res.meta ?? null);
       })
       .catch(() => toast.error("Failed to load orders"));
-  }, [page, status, dateRange.from, dateRange.to]);
+  }, [page, status, platform, dateRange.from, dateRange.to]);
 
   useEffect(load, [load]);
 
@@ -164,6 +170,24 @@ export default function OrdersPage() {
             <SelectItem value="VOIDED">Voided</SelectItem>
           </SelectContent>
         </Select>
+        <Select
+          value={platform}
+          onValueChange={(v) => {
+            setPlatform(v);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All platforms</SelectItem>
+            <SelectItem value="OTHER">In-store</SelectItem>
+            <SelectItem value="FOODPANDA">Foodpanda</SelectItem>
+            <SelectItem value="PATHAO">Pathao food</SelectItem>
+            <SelectItem value="FOODI">Foodi</SelectItem>
+          </SelectContent>
+        </Select>
         <DateRangePicker
           value={dateRange}
           onChange={(v) => {
@@ -182,6 +206,7 @@ export default function OrdersPage() {
               <TableHead>Date</TableHead>
               <TableHead>Branch</TableHead>
               <TableHead>Cashier</TableHead>
+              <TableHead>Platform</TableHead>
               <TableHead className="text-right">Total</TableHead>
               <TableHead>Payment</TableHead>
               <TableHead>Status</TableHead>
@@ -191,14 +216,14 @@ export default function OrdersPage() {
           <TableBody>
             {orders === null && (
               <TableRow>
-                <TableCell colSpan={8}>
+                <TableCell colSpan={9}>
                   <Skeleton className="h-20 w-full" />
                 </TableCell>
               </TableRow>
             )}
             {orders?.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
                   No orders found.
                 </TableCell>
               </TableRow>
@@ -214,6 +239,13 @@ export default function OrdersPage() {
                 </TableCell>
                 <TableCell>{o.branch.code}</TableCell>
                 <TableCell className="text-muted-foreground">{o.cashier.name}</TableCell>
+                <TableCell>
+                  {o.platform && o.platform !== "OTHER" ? (
+                    <Badge variant="secondary">{platformLabel(o.platform)}</Badge>
+                  ) : (
+                    <span className="text-muted-foreground">In-store</span>
+                  )}
+                </TableCell>
                 <TableCell className="text-right font-semibold">{money(o.totalAmount)}</TableCell>
                 <TableCell className="text-muted-foreground">{methodLabel(o.paymentMethod)}</TableCell>
                 <TableCell>
@@ -222,9 +254,11 @@ export default function OrdersPage() {
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button variant="ghost" size="icon" onClick={() => openDetail(o.id)}>
-                    <Eye className="h-4 w-4" />
-                  </Button>
+                  <Hint label="View order">
+                    <Button variant="ghost" size="icon" onClick={() => openDetail(o.id)}>
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  </Hint>
                 </TableCell>
               </TableRow>
             ))}
@@ -268,6 +302,9 @@ export default function OrdersPage() {
                 <DialogDescription>
                   {new Date(detail.createdAt).toLocaleString()} · {detail.branch.name} ·{" "}
                   {detail.cashier.name}
+                  {detail.platform && detail.platform !== "OTHER"
+                    ? ` · ${platformLabel(detail.platform)}${detail.platformOrderId ? ` #${detail.platformOrderId}` : ""}`
+                    : ""}
                   {detail.customerName || detail.customerPhone
                     ? ` · Customer: ${detail.customerName ?? ""}${detail.customerPhone ? ` (${detail.customerPhone})` : ""}`
                     : ""}

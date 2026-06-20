@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Hint } from "@/components/ui/hint";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -60,22 +61,22 @@ function MethodPicker({
             {PAYMENT_METHODS.filter((m) => m.group === group).map((m) => {
               const active = value === m.id;
               return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => onChange(m.id)}
-                  title={m.label}
-                  style={{
-                    color: m.color,
-                    ...(active
-                      ? { borderColor: m.color, boxShadow: `0 0 0 1.5px ${m.color}` }
-                      : {}),
-                  }}
-                  className="flex h-9 items-center gap-1.5 rounded-lg border bg-card px-2.5 text-xs font-semibold transition hover:border-foreground/30"
-                >
-                  <MethodVisual method={m} className={m.logo ? "h-5 w-auto" : "h-4 w-4"} />
-                  {!m.hideLabel && <span>{m.label}</span>}
-                </button>
+                <Hint key={m.id} label={m.label}>
+                  <button
+                    type="button"
+                    onClick={() => onChange(m.id)}
+                    style={{
+                      color: m.color,
+                      ...(active
+                        ? { borderColor: m.color, boxShadow: `0 0 0 1.5px ${m.color}` }
+                        : {}),
+                    }}
+                    className="flex h-9 items-center gap-1.5 rounded-lg border bg-card px-2.5 text-xs font-semibold transition hover:border-foreground/30"
+                  >
+                    <MethodVisual method={m} className={m.logo ? "h-5 w-auto" : "h-4 w-4"} />
+                    {!m.hideLabel && <span>{m.label}</span>}
+                  </button>
+                </Hint>
               );
             })}
           </div>

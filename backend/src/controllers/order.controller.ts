@@ -1,4 +1,4 @@
-import { PaymentMethod } from "@prisma/client";
+import { OrderPlatform, PaymentMethod } from "@prisma/client";
 import { Request, Response } from "express";
 import { z } from "zod";
 import * as orderService from "../services/order.service";
@@ -42,6 +42,8 @@ const createOrderSchema = z.object({
     .max(4),
   customerName: z.string().max(100).optional(),
   customerPhone: z.string().max(20).optional(),
+  platform: z.nativeEnum(OrderPlatform).optional(),
+  platformOrderId: z.string().max(100).optional(),
   discountAmount: z.number().min(0).optional(),
   taxAmount: z.number().min(0).optional(),
   notes: z.string().max(500).optional(),
@@ -67,6 +69,7 @@ export async function listOrders(req: Request, res: Response) {
     from: typeof req.query.from === "string" ? req.query.from : undefined,
     to: typeof req.query.to === "string" ? req.query.to : undefined,
     status: typeof req.query.status === "string" ? req.query.status : undefined,
+    platform: typeof req.query.platform === "string" ? req.query.platform : undefined,
   };
   const { orders, meta } = await orderService.listOrders(biz(req), opts);
   list(res, orders, meta);

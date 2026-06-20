@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Hint } from "@/components/ui/hint";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -168,24 +169,24 @@ export function ModifierManager() {
                 <div className="flex flex-wrap items-center gap-2">
                   <CardTitle className="text-base">{g.name}</CardTitle>
                   <Badge variant="secondary">{TYPE_LABEL[g.type]}</Badge>
-                  <Badge
-                    variant="outline"
-                    title="Number of products this modifier group is attached to"
-                  >
-                    Applied on {g._count?.productLinks ?? 0}{" "}
-                    {(g._count?.productLinks ?? 0) === 1 ? "product" : "products"}
-                  </Badge>
+                  <Hint label="Number of products this modifier group is attached to">
+                    <Badge variant="outline">
+                      Applied on {g._count?.productLinks ?? 0}{" "}
+                      {(g._count?.productLinks ?? 0) === 1 ? "product" : "products"}
+                    </Badge>
+                  </Hint>
                   <span className="text-xs text-muted-foreground">· {g.items.length} options</span>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-muted-foreground hover:text-red-500"
-                  title="Delete this modifier group"
-                  onClick={() => deleteGroup(g)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <Hint label="Delete this modifier group">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-muted-foreground hover:text-red-500"
+                    onClick={() => deleteGroup(g)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </Hint>
               </CardHeader>
               <CardContent className="space-y-2">
                 {g.items.length === 0 && (
@@ -201,15 +202,16 @@ export function ModifierManager() {
                       <span className="text-muted-foreground">
                         {Number(it.price) > 0 ? `+${money(it.price)}` : "Free"}
                       </span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-muted-foreground hover:text-red-500"
-                        title="Remove this option"
-                        onClick={() => deleteItem(g.id, it.id)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      <Hint label="Remove this option">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-muted-foreground hover:text-red-500"
+                          onClick={() => deleteItem(g.id, it.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </Hint>
                     </div>
                   </div>
                 ))}

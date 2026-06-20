@@ -120,6 +120,13 @@ export async function getSalesReport(businessId: string, range: DateRange) {
     _sum: { totalAmount: true },
   });
 
+  const byPlatformGroups = await prisma.order.groupBy({
+    by: ["platform"],
+    where: orderWhere(businessId, range),
+    _count: true,
+    _sum: { totalAmount: true },
+  });
+
   // ── Order statistics (incl. VOIDED, which the rest of the report excludes) ──
   const allInRange: Prisma.OrderWhereInput = {
     businessId,
@@ -145,6 +152,11 @@ export async function getSalesReport(businessId: string, range: DateRange) {
     })),
     byPaymentMethod: byPayment.map((p) => ({
       method: p.paymentMethod,
+      orders: p._count,
+      revenue: Number(p._sum.totalAmount ?? 0),
+    })),
+    byPlatform: byPlatformGroups.map((p) => ({
+      platform: p.platform,
       orders: p._count,
       revenue: Number(p._sum.totalAmount ?? 0),
     })),

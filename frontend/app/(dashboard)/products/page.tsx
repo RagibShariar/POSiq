@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Hint } from "@/components/ui/hint";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -333,7 +334,7 @@ export default function ProductsPage() {
             Modifiers
           </TabsTrigger>
         </TabsList>
-        <Button size="lg" onClick={openCreate} title="Add a new product">
+        <Button size="lg" onClick={openCreate}>
           <Plus className="mr-1 h-4 w-4" /> New product
         </Button>
       </div>
@@ -430,13 +431,13 @@ export default function ProductsPage() {
                     </TableCell>
                     <TableCell className="text-center">
                       {varCount > 0 ? (
-                        <Badge variant="secondary" title={`${varCount} variation(s)`}>
-                          {varCount}
-                        </Badge>
+                        <Hint label={`${varCount} variation(s)`}>
+                          <Badge variant="secondary">{varCount}</Badge>
+                        </Hint>
                       ) : (
-                        <span className="text-muted-foreground" title="No variations">
-                          0
-                        </span>
+                        <Hint label="No variations">
+                          <span className="text-muted-foreground">0</span>
+                        </Hint>
                       )}
                     </TableCell>
                     <TableCell className="text-right">{money(p.price)}</TableCell>
@@ -445,31 +446,26 @@ export default function ProductsPage() {
                     </TableCell>
                     <TableCell className="text-right">{margin}%</TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="View details"
-                        onClick={() => openView(p)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="Edit product"
-                        onClick={() => openEdit(p)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-muted-foreground"
-                        title="Delete product"
-                        onClick={() => deleteProduct(p)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <Hint label="View details">
+                        <Button variant="ghost" size="icon" onClick={() => openView(p)}>
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </Hint>
+                      <Hint label="Edit product">
+                        <Button variant="ghost" size="icon" onClick={() => openEdit(p)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </Hint>
+                      <Hint label="Delete product">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground"
+                          onClick={() => deleteProduct(p)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </Hint>
                     </TableCell>
                   </TableRow>
                 );
@@ -540,15 +536,16 @@ export default function ProductsPage() {
                   <TableCell className="font-medium">{c.name}</TableCell>
                   <TableCell className="text-right">{c._count?.products ?? 0}</TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-muted-foreground"
-                      title="Delete category"
-                      onClick={() => deleteCategory(c)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <Hint label="Delete category">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground"
+                        onClick={() => deleteCategory(c)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </Hint>
                   </TableCell>
                 </TableRow>
               ))}
@@ -659,7 +656,6 @@ export default function ProductsPage() {
                       return (
                         <label
                           key={c.id}
-                          title="A product can belong to multiple categories"
                           className={`flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm ${
                             checked ? "border-primary bg-primary/5" : "bg-card"
                           }`}
@@ -680,10 +676,7 @@ export default function ProductsPage() {
 
             {/* ── Variations & modifiers ── */}
             <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
-              <label
-                className="flex cursor-pointer items-center gap-2 text-sm font-medium"
-                title="Tick this to sell the product in multiple sizes/flavors, each with its own price"
-              >
+              <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
                 <input
                   type="checkbox"
                   checked={hasVariations}
@@ -715,19 +708,20 @@ export default function ProductsPage() {
                         placeholder="৳ price"
                         className="h-8 w-28"
                       />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-red-500"
-                        title="Remove variation"
-                        onClick={() => removeVarRow(idx)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      <Hint label="Remove variation">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-red-500"
+                          onClick={() => removeVarRow(idx)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </Hint>
                     </div>
                   ))}
-                  <Button type="button" variant="outline" size="sm" onClick={addVarRow} title="Add a variation">
+                  <Button type="button" variant="outline" size="sm" onClick={addVarRow}>
                     <Plus className="mr-1 h-4 w-4" /> Add variation
                   </Button>
                 </div>
@@ -749,7 +743,6 @@ export default function ProductsPage() {
                       return (
                         <label
                           key={g.id}
-                          title={`${g.items.length} option(s)`}
                           className={`flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm ${
                             checked ? "border-primary bg-primary/5" : "bg-card"
                           }`}

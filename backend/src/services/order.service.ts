@@ -1,4 +1,4 @@
-import { InventoryType, PaymentMethod } from "@prisma/client";
+import { InventoryType, OrderPlatform, PaymentMethod } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { ApiError } from "../utils/ApiError";
 import { buildMeta, ListMeta } from "../utils/response";
@@ -35,6 +35,8 @@ interface CreateOrderInput {
   payments: PaymentInput[];
   customerName?: string;
   customerPhone?: string;
+  platform?: OrderPlatform;
+  platformOrderId?: string;
   discountAmount?: number;
   taxAmount?: number;
   notes?: string;
@@ -47,6 +49,7 @@ interface ListOptions {
   from?: string;
   to?: string;
   status?: string;
+  platform?: string;
 }
 
 const orderSelect = {
@@ -56,6 +59,8 @@ const orderSelect = {
   cashierId: true,
   customerName: true,
   customerPhone: true,
+  platform: true,
+  platformOrderId: true,
   subtotal: true,
   discountAmount: true,
   taxAmount: true,
@@ -287,6 +292,8 @@ export async function createOrder(
         orderNumber,
         customerName: input.customerName,
         customerPhone: input.customerPhone,
+        platform: input.platform ?? "OTHER",
+        platformOrderId: input.platformOrderId?.trim() || undefined,
         subtotal,
         discountAmount,
         taxAmount,
@@ -357,6 +364,7 @@ export async function listOrders(
     businessId,
     ...(opts.branchId ? { branchId: opts.branchId } : {}),
     ...(opts.status ? { status: opts.status as never } : {}),
+    ...(opts.platform ? { platform: opts.platform as never } : {}),
     ...(opts.from || opts.to
       ? {
           createdAt: {

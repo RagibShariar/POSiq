@@ -5,8 +5,10 @@ import Link from "next/link";
 import { BranchBadge } from "@/components/app-shell/branch-badge";
 import { Calculator } from "@/components/app-shell/calculator";
 import { Clock } from "@/components/app-shell/clock";
+import { FullscreenToggle } from "@/components/app-shell/fullscreen-toggle";
 import { RequireAuth } from "@/components/app-shell/require-auth";
 import { ThemeToggle } from "@/components/app-shell/theme-toggle";
+import { InstallAppButton } from "@/components/pwa-install";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 
@@ -25,7 +27,9 @@ function PosChrome({ children }: { children: React.ReactNode }) {
           <BranchBadge />
         </div>
         <div className="flex items-center gap-1">
+          <InstallAppButton />
           <Calculator />
+          <FullscreenToggle />
           <ThemeToggle />
           <span className="mx-2 hidden text-sm text-muted-foreground sm:inline">
             {user?.name}

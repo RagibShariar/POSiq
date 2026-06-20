@@ -122,6 +122,44 @@ export interface TaxSettings {
   label: string;
 }
 
+// Printed invoice / customer receipt customization (settings.receipt).
+export interface InvoiceSettings {
+  headerText: string;
+  footerText: string;
+  showLogo: boolean;
+  showCashier: boolean;
+  paperSize: "80mm" | "58mm" | "A4";
+  showPhone: boolean;
+  showAddress: boolean;
+  showEmail: boolean;
+  showCustomer: boolean;
+  showTaxBreakdown: boolean;
+  showOrderNote: boolean;
+  accentColor: string;
+  fontScale: number;
+}
+
+export type BarcodeSymbology = "CODE128" | "EAN13" | "UPC" | "CODE39";
+
+// Barcode sticker / label sheet defaults (settings.barcode).
+export interface BarcodeSettings {
+  barcodeType: BarcodeSymbology;
+  sheet: string;
+  showProductName: boolean;
+  productNameSize: number;
+  showVariation: boolean;
+  variationSize: number;
+  showPrice: boolean;
+  priceSize: number;
+  priceTaxMode: "inc" | "exc";
+  showBusinessName: boolean;
+  businessNameSize: number;
+  showPackingDate: boolean;
+  packingDateSize: number;
+  showSku: boolean;
+  skuSize: number;
+}
+
 export interface SummaryReport {
   today: {
     orders: number;
@@ -151,12 +189,27 @@ export interface SalesReport {
   };
   daily: { date: string; orders: number; revenue: number }[];
   byPaymentMethod: { method: string; orders: number; revenue: number }[];
+  byPlatform: { platform: string; orders: number; revenue: number }[];
   orderStats: {
     itemsSold: number;
     cancelled: number;
     voided: number;
     discounted: number;
   };
+}
+
+export type OrderPlatform = "OTHER" | "FOODPANDA" | "PATHAO" | "FOODI" | "SHOHOZ";
+
+export interface PlatformConfig {
+  enabled: boolean;
+  paymentMethod: "PAY_NOW" | "PAY_LATER";
+  discountPercent: number;
+}
+
+export interface PlatformSettings {
+  foodpanda: PlatformConfig;
+  pathao: PlatformConfig;
+  foodi: PlatformConfig;
 }
 
 export interface ProductReport {

@@ -3,6 +3,7 @@
 import { Calculator as CalculatorIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Hint } from "@/components/ui/hint";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type Op = "+" | "-" | "*" | "/";
@@ -96,11 +97,13 @@ export function Calculator() {
 
   return (
     <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" title="Calculator" aria-label="Calculator">
-          <CalculatorIcon className="h-4 w-4" />
-        </Button>
-      </PopoverTrigger>
+      <Hint label="Calculator">
+        <PopoverTrigger asChild>
+          <Button variant="ghost" size="icon" aria-label="Calculator">
+            <CalculatorIcon className="h-4 w-4" />
+          </Button>
+        </PopoverTrigger>
+      </Hint>
       <PopoverContent align="end" className="w-64">
         <div className="mb-2 flex h-14 items-center justify-end overflow-hidden rounded-lg bg-muted px-3 text-2xl font-bold tabular-nums">
           {display}

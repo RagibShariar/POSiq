@@ -13,8 +13,23 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiRequestError } from "@/lib/api";
+import { BARCODE_TYPES, DEFAULT_BARCODE_SETTINGS, SHEET_PRESETS } from "@/lib/barcode";
+import type { BarcodeSettings, InvoiceSettings, PlatformSettings } from "@/lib/types";
+
+const PLATFORM_ROWS: { key: keyof PlatformSettings; label: string }[] = [
+  { key: "foodpanda", label: "Foodpanda" },
+  { key: "pathao", label: "Pathao food" },
+  { key: "foodi", label: "Foodi" },
+];
 
 interface BusinessProfile {
   name: string;
@@ -25,13 +40,6 @@ interface BusinessProfile {
   currency: string;
   timezone: string;
   subscription?: { plan: string; status: string; currentPeriodEnd: string } | null;
-}
-
-interface ReceiptSettings {
-  headerText: string;
-  footerText: string;
-  showLogo: boolean;
-  showCashier: boolean;
 }
 
 interface TaxSettings {
@@ -65,16 +73,27 @@ const PLANS = [
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
-  const [receipt, setReceipt] = useState<ReceiptSettings | null>(null);
+  const [receipt, setReceipt] = useState<InvoiceSettings | null>(null);
   const [tax, setTax] = useState<TaxSettings | null>(null);
+  const [platforms, setPlatforms] = useState<PlatformSettings | null>(null);
+  const [barcode, setBarcode] = useState<BarcodeSettings | null>(null);
   const [sub, setSub] = useState<Subscription | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     api.get<BusinessProfile>("/business").then((r) => setProfile(r.data)).catch(() => {});
-    api.get<ReceiptSettings>("/settings/receipt").then((r) => setReceipt(r.data)).catch(() => {});
-    api.get<{ tax: TaxSettings }>("/settings").then((r) => setTax(r.data.tax)).catch(() => {});
+    api
+      .get<{ tax: TaxSettings; platforms: PlatformSettings; receipt: InvoiceSettings; barcode: BarcodeSettings }>(
+        "/settings"
+      )
+      .then((r) => {
+        setTax(r.data.tax);
+        setPlatforms(r.data.platforms);
+        setReceipt(r.data.receipt);
+        setBarcode({ ...DEFAULT_BARCODE_SETTINGS, ...r.data.barcode });
+      })
+      .catch(() => {});
     api.get<Subscription>("/subscription").then((r) => setSub(r.data)).catch(() => {});
     api.get<Invoice[]>("/subscription/invoices").then((r) => setInvoices(r.data)).catch(() => {});
   }, []);
@@ -128,6 +147,42 @@ export default function SettingsPage() {
     }
   }
 
+  function setPlat(key: keyof PlatformSettings, patch: Partial<PlatformSettings[keyof PlatformSettings]>) {
+    setPlatforms((p) => (p ? { ...p, [key]: { ...p[key], ...patch } } : p));
+  }
+
+  async function savePlatforms(e: React.FormEvent) {
+    e.preventDefault();
+    if (!platforms) return;
+    setBusy(true);
+    try {
+      await api.patch("/settings", { platforms });
+      toast.success("Platform settings saved");
+    } catch (err) {
+      toast.error(err instanceof ApiRequestError ? err.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveBarcode(e: React.FormEvent) {
+    e.preventDefault();
+    if (!barcode) return;
+    setBusy(true);
+    try {
+      await api.patch("/settings", { barcode });
+      toast.success("Barcode settings saved");
+    } catch (err) {
+      toast.error(err instanceof ApiRequestError ? err.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function setBc(patch: Partial<BarcodeSettings>) {
+    setBarcode((b) => (b ? { ...b, ...patch } : b));
+  }
+
   async function changePlan(plan: string) {
     if (!confirm(`Switch to the ${plan} plan?`)) return;
     try {
@@ -146,7 +201,9 @@ export default function SettingsPage() {
     <Tabs defaultValue="business" className="max-w-3xl space-y-4">
       <TabsList>
         <TabsTrigger value="business">Business</TabsTrigger>
-        <TabsTrigger value="receipt">Receipt</TabsTrigger>
+        <TabsTrigger value="receipt">Invoice</TabsTrigger>
+        <TabsTrigger value="barcode">Barcode</TabsTrigger>
+        <TabsTrigger value="platforms">Platforms</TabsTrigger>
         <TabsTrigger value="subscription">Subscription</TabsTrigger>
       </TabsList>
 
@@ -252,12 +309,48 @@ export default function SettingsPage() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Receipt</CardTitle>
-            <CardDescription>Customize what prints on customer receipts.</CardDescription>
+            <CardTitle className="text-base">Invoice / receipt</CardTitle>
+            <CardDescription>Customize what prints on the customer invoice.</CardDescription>
           </CardHeader>
           <CardContent>
             {receipt && (
               <form onSubmit={saveReceipt} className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Paper size</Label>
+                    <Select
+                      value={receipt.paperSize}
+                      onValueChange={(v) =>
+                        setReceipt({ ...receipt, paperSize: v as InvoiceSettings["paperSize"] })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="80mm">80mm thermal</SelectItem>
+                        <SelectItem value="58mm">58mm thermal</SelectItem>
+                        <SelectItem value="A4">A4 sheet</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Accent color</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={receipt.accentColor}
+                        onChange={(e) => setReceipt({ ...receipt, accentColor: e.target.value })}
+                        className="h-9 w-14 rounded border"
+                      />
+                      <Input
+                        value={receipt.accentColor}
+                        onChange={(e) => setReceipt({ ...receipt, accentColor: e.target.value })}
+                        className="w-28"
+                      />
+                    </div>
+                  </div>
+                </div>
                 <div className="space-y-2">
                   <Label>Header text</Label>
                   <Input
@@ -273,26 +366,223 @@ export default function SettingsPage() {
                     onChange={(e) => setReceipt({ ...receipt, footerText: e.target.value })}
                   />
                 </div>
-                <div className="flex gap-6">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={receipt.showLogo}
-                      onChange={(e) => setReceipt({ ...receipt, showLogo: e.target.checked })}
-                    />
-                    Show logo
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={receipt.showCashier}
-                      onChange={(e) => setReceipt({ ...receipt, showCashier: e.target.checked })}
-                    />
-                    Show cashier name
-                  </label>
+                <div className="space-y-2">
+                  <Label>Font scale ({receipt.fontScale}%)</Label>
+                  <input
+                    type="range"
+                    min={80}
+                    max={130}
+                    step={5}
+                    value={receipt.fontScale}
+                    onChange={(e) => setReceipt({ ...receipt, fontScale: Number(e.target.value) })}
+                    className="w-full"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {(
+                    [
+                      ["showLogo", "Show logo"],
+                      ["showCashier", "Cashier name"],
+                      ["showPhone", "Business phone"],
+                      ["showAddress", "Business address"],
+                      ["showEmail", "Business email"],
+                      ["showCustomer", "Customer details"],
+                      ["showTaxBreakdown", "Tax breakdown"],
+                      ["showOrderNote", "Order note"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <label key={key} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={receipt[key]}
+                        onChange={(e) => setReceipt({ ...receipt, [key]: e.target.checked })}
+                      />
+                      {label}
+                    </label>
+                  ))}
                 </div>
                 <Button type="submit" disabled={busy}>
-                  {busy ? "Saving…" : "Save receipt settings"}
+                  {busy ? "Saving…" : "Save invoice settings"}
+                </Button>
+              </form>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="barcode">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Barcode labels</CardTitle>
+            <CardDescription>
+              Defaults for the{" "}
+              <a href="/labels" className="font-medium underline">
+                Print Labels
+              </a>{" "}
+              page — which fields appear on each sticker and how big they are.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {barcode && (
+              <form onSubmit={saveBarcode} className="space-y-5">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Barcode type</Label>
+                    <Select
+                      value={barcode.barcodeType}
+                      onValueChange={(v) =>
+                        setBc({ barcodeType: v as BarcodeSettings["barcodeType"] })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {BARCODE_TYPES.map((b) => (
+                          <SelectItem key={b.id} value={b.id}>
+                            {b.label} — {b.hint}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Default label sheet</Label>
+                    <Select value={barcode.sheet} onValueChange={(v) => setBc({ sheet: v })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SHEET_PRESETS.map((s) => (
+                          <SelectItem key={s.key} value={s.key}>
+                            {s.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {(
+                    [
+                      ["showProductName", "productNameSize", "Product name"],
+                      ["showVariation", "variationSize", "Variation"],
+                      ["showPrice", "priceSize", "Price"],
+                      ["showBusinessName", "businessNameSize", "Business name"],
+                      ["showPackingDate", "packingDateSize", "Packing date"],
+                      ["showSku", "skuSize", "SKU text"],
+                    ] as const
+                  ).map(([showKey, sizeKey, label]) => (
+                    <div key={showKey} className="flex items-center justify-between rounded-lg border p-3">
+                      <label className="flex items-center gap-2 text-sm font-medium">
+                        <input
+                          type="checkbox"
+                          checked={barcode[showKey]}
+                          onChange={(e) => setBc({ [showKey]: e.target.checked })}
+                        />
+                        {label}
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Size</span>
+                        <Input
+                          type="number"
+                          min={6}
+                          max={40}
+                          value={barcode[sizeKey]}
+                          disabled={!barcode[showKey]}
+                          onChange={(e) => setBc({ [sizeKey]: Number(e.target.value) || 10 })}
+                          className="h-8 w-16"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={barcode.priceTaxMode === "inc"}
+                    onChange={(e) => setBc({ priceTaxMode: e.target.checked ? "inc" : "exc" })}
+                  />
+                  Show price including tax
+                </label>
+
+                <Button type="submit" disabled={busy}>
+                  {busy ? "Saving…" : "Save barcode defaults"}
+                </Button>
+              </form>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="platforms">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Platform management</CardTitle>
+            <CardDescription>
+              Delivery channels available at the POS. A platform&apos;s discount is auto-applied when
+              the cashier selects it. In-store sales always use no platform.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {platforms && (
+              <form onSubmit={savePlatforms} className="space-y-3">
+                {PLATFORM_ROWS.map(({ key, label }) => {
+                  const cfg = platforms[key];
+                  return (
+                    <div key={key} className="rounded-lg border p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <label className="flex items-center gap-2 text-sm font-semibold">
+                          <input
+                            type="checkbox"
+                            checked={cfg.enabled}
+                            onChange={(e) => setPlat(key, { enabled: e.target.checked })}
+                          />
+                          {label}
+                        </label>
+                        <div className="flex overflow-hidden rounded-md border text-xs font-semibold">
+                          {(["PAY_NOW", "PAY_LATER"] as const).map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => setPlat(key, { paymentMethod: m })}
+                              className={`px-3 py-1.5 ${
+                                cfg.paymentMethod === m
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-muted text-muted-foreground"
+                              }`}
+                            >
+                              {m === "PAY_NOW" ? "Pay now" : "Pay later"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center gap-2">
+                        <Label className="text-xs text-muted-foreground">Auto discount</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.5"
+                          value={cfg.discountPercent}
+                          onChange={(e) =>
+                            setPlat(key, { discountPercent: Number(e.target.value) || 0 })
+                          }
+                          className="h-8 w-24"
+                        />
+                        <span className="text-xs text-muted-foreground">%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">In-store</span> is always available
+                  with no platform discount.
+                </p>
+                <Button type="submit" disabled={busy}>
+                  {busy ? "Saving…" : "Save platforms"}
                 </Button>
               </form>
             )}

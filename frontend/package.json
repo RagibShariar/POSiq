@@ -9,9 +9,11 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@types/jsbarcode": "^3.11.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
+    "jsbarcode": "^3.12.3",
     "lucide-react": "^1.17.0",
     "next": "15.5.19",
     "next-themes": "^0.4.6",

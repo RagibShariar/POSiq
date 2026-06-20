@@ -229,6 +229,8 @@ model Order {
   orderNumber    String // "ORD-2026-00123"
   customerName   String?
   customerPhone  String?
+  platform        OrderPlatform @default(OTHER)
+  platformOrderId String? // external order id from the delivery platform
   subtotal       Decimal
   discountAmount Decimal       @default(0)
   taxAmount      Decimal       @default(0)
@@ -327,6 +329,15 @@ enum OrderStatus {
   REFUNDED
   PARTIALLY_REFUNDED
   VOIDED
+}
+
+// Sales channel / delivery platform an order came through.
+enum OrderPlatform {
+  OTHER // walk-in / in-store
+  FOODPANDA
+  PATHAO
+  FOODI
+  SHOHOZ
 }
 
 // ─── REFUND ──────────────────────────────────────────

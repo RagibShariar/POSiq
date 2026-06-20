@@ -21,6 +21,7 @@ import {
   type DateRangeValue,
 } from "@/components/date-range-picker";
 import { methodColor, methodLabel } from "@/components/pos/payment-methods";
+import { platformColor, platformLabel } from "@/lib/platforms";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -376,6 +377,44 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Sales by platform ─────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            Sales by platform <Period label={period} />
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {sales.byPlatform.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No sales in this period.</p>
+          ) : (
+            sales.byPlatform
+              .slice()
+              .sort((a, b) => b.revenue - a.revenue)
+              .map((p) => {
+                const total = sales.byPlatform.reduce((s, x) => s + x.revenue, 0);
+                const share = total > 0 ? Math.round((p.revenue / total) * 100) : 0;
+                return (
+                  <div key={p.platform}>
+                    <div className="mb-1 flex items-center justify-between text-sm">
+                      <span className="font-medium">{platformLabel(p.platform)}</span>
+                      <span className="text-muted-foreground">
+                        {money(p.revenue)} · {p.orders} order{p.orders === 1 ? "" : "s"} · {share}%
+                      </span>
+                    </div>
+                    <div className="h-2 rounded-full bg-muted">
+                      <div
+                        className="h-2 rounded-full"
+                        style={{ width: `${share}%`, backgroundColor: platformColor(p.platform) }}
+                      />
+                    </div>
+                  </div>
+                );
+              })
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── Top selling items ─────────────────────────── */}
       <Card>

@@ -78,16 +78,51 @@ export async function deleteBusiness(businessId: string) {
 
 // ─── SETTINGS (JSON blob on Business) ────────────────
 const DEFAULT_SETTINGS = {
+  // Customer invoice / printed receipt customization.
   receipt: {
     headerText: "",
     footerText: "Thank you for your purchase!",
     showLogo: true,
     showCashier: true,
+    // Invoice customization
+    paperSize: "80mm", // "80mm" | "58mm" | "A4"
+    showPhone: true,
+    showAddress: true,
+    showEmail: false,
+    showCustomer: true,
+    showTaxBreakdown: true,
+    showOrderNote: true,
+    accentColor: "#27496d",
+    fontScale: 100, // percent
   },
   tax: {
     enabled: false,
     rate: 0, // percent, applied on (subtotal - discount)
     label: "VAT",
+  },
+  // Barcode sticker / label sheet defaults. Used to seed the Print Labels page.
+  barcode: {
+    barcodeType: "CODE128", // CODE128 | EAN13 | UPC | CODE39
+    sheet: "30-up", // preset key, see frontend lib/barcode
+    showProductName: true,
+    productNameSize: 13,
+    showVariation: false,
+    variationSize: 11,
+    showPrice: true,
+    priceSize: 13,
+    priceTaxMode: "inc", // "inc" | "exc"
+    showBusinessName: true,
+    businessNameSize: 11,
+    showPackingDate: false,
+    packingDateSize: 10,
+    showSku: false,
+    skuSize: 10,
+  },
+  // Delivery platforms. paymentMethod: PAY_NOW | PAY_LATER; discountPercent auto-applied at the POS.
+  platforms: {
+    foodpanda: { enabled: true, paymentMethod: "PAY_LATER", discountPercent: 0 },
+    pathao: { enabled: true, paymentMethod: "PAY_NOW", discountPercent: 0 },
+    foodi: { enabled: true, paymentMethod: "PAY_NOW", discountPercent: 0 },
   },
 };
 
@@ -106,6 +141,8 @@ export async function getSettings(businessId: string): Promise<Settings> {
     ...stored,
     receipt: { ...DEFAULT_SETTINGS.receipt, ...((stored.receipt as object) ?? {}) },
     tax: { ...DEFAULT_SETTINGS.tax, ...((stored.tax as object) ?? {}) },
+    barcode: { ...DEFAULT_SETTINGS.barcode, ...((stored.barcode as object) ?? {}) },
+    platforms: { ...DEFAULT_SETTINGS.platforms, ...((stored.platforms as object) ?? {}) },
   };
 }
 
@@ -116,6 +153,8 @@ export async function updateSettings(businessId: string, patch: Record<string, u
     ...patch,
     receipt: { ...current.receipt, ...((patch.receipt as object) ?? {}) },
     tax: { ...current.tax, ...((patch.tax as object) ?? {}) },
+    barcode: { ...current.barcode, ...((patch.barcode as object) ?? {}) },
+    platforms: { ...current.platforms, ...((patch.platforms as object) ?? {}) },
   };
 
   await prisma.business.update({
